@@ -5,28 +5,10 @@
 #include "Rendering/ShaderStructs.h"
 #include "Core/Variables.h"
 
-PathTracingRenderer::PathTracingRenderer()
-{
-}
-
 static uint32_t accumulation_frame = 0;
 
 void PathTracingRenderer::addPass(FrameGraph &fg, Ref<RayTracingScene> rt_scene, uint32_t sun_light_index)
 {
-	if (!accumulation_texture || accumulation_texture->getSize() != Renderer::getRenderResolution())
-	{
-		TextureDescription desc;
-		desc.width = Renderer::getRenderWidth();
-		desc.height = Renderer::getRenderHeight();
-		desc.format = FORMAT_R32G32B32A32_SFLOAT;
-		desc.usage_flags = TEXTURE_USAGE_STORAGE;
-		accumulation_texture = gDynamicRHI->createTexture(desc);
-		accumulation_texture->fill();
-		accumulation_texture->setDebugName("Path Trace Accumulation");
-	}
-
-	fg.importTexture(GFXRID(PathTraceAccumulation), accumulation_texture);
-
 	accumulation_frame++;
 
 	if (render_path_tracing_first_frame)
@@ -36,6 +18,8 @@ void PathTracingRenderer::addPass(FrameGraph &fg, Ref<RayTracingScene> rt_scene,
 	fg.addCallbackPass("Path Tracing Pass",
 	[&](RenderPassBuilder &builder)
 	{
+		if (builder.createPersistentTexture(GFXRID(PathTraceAccumulation), Renderer::getRenderWidth(), Renderer::getRenderHeight(), FORMAT_R32G32B32A32_SFLOAT))
+			accumulation_frame = 0;
 		builder.createTexture(GFXRID(FinalNoPostTexture), Renderer::getRenderWidth(), Renderer::getRenderHeight(), FORMAT_R32G32B32A32_SFLOAT);
 		builder.writeUAVTexture(GFXRID(FinalNoPostTexture));
 		builder.writeUAVTexture(GFXRID(PathTraceAccumulation));

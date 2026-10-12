@@ -7,3 +7,15 @@
 [submodule "vendor/meshoptimizer"]
 	path = vendor/meshoptimizer
 	url = https://github.com/zeux/meshoptimizer.git
+[submodule "vendor/rtxdi"]
+	path = vendor/rtxdi
+	url = https://github.com/NVIDIA-RTX/RTXDI-Library.git
+[submodule "vendor/nrd"]
+	path = vendor/nrd
+	url = https://github.com/NVIDIA-RTX/NRD.git
+[submodule "vendor/MathLib"]
+	path = vendor/MathLib
+	url = https://github.com/NVIDIA-RTX/MathLib.git
+[submodule "vendor/ShaderMake"]
+	path = vendor/ShaderMake
+	url = https://github.com/NVIDIA-RTX/ShaderMake.git

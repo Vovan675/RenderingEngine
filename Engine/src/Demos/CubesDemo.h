@@ -1,5 +1,7 @@
 #pragma once
 #include "RHI/DynamicRHI.h"
+#include "FrameGraph/PersistentResources.h"
+#include "FrameGraph/TransientResources.h"
 
 // Render multiple textured rotating cubes
 class CubesDemo
@@ -45,6 +47,9 @@ private:
 	inline static RHIPipelineRef pso;
 
 	inline static eastl::vector<RHITextureRef> checker_textures;
+
+	inline static PersistentResources persistent_resources;
+	inline static TransientResources transient_resources;
 
 	inline static float value = 0.0f;
 };

@@ -8,7 +8,6 @@
 #include "Assets/AssetManager.h"
 #include "Scene/Scene.h"
 #include "Core/Platform.h"
-#include "FrameGraph/TransientResources.h"
 #include "Physics/PhysXWrapper.h"
 
 #include "RHI/Vulkan/VulkanDynamicRHI.h"
@@ -158,8 +157,6 @@ void Application::run()
 			}
 		}
 
-		TransientResources::update();
-
 		if (current_demo == DEMO_NONE)
 		{
 			ImGuiWrapper::begin();
@@ -233,7 +230,6 @@ void Application::cleanup()
 
 	GlobalBufferCache::shutdown();
 	AssetManager::shutdown();
-	TransientResources::cleanup();
 	ImGuiWrapper::shutdown();
 	cleanupResources();
 	// Shader::destroyAllShaders(); // TODO: implement

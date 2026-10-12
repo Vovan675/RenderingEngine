@@ -5,11 +5,13 @@
 
 cbuffer GeometryPassConstants : register(b0)
 {
-	float4x4 pass_view_projection;
+	uint view_id;
+	uint cull_views_buffer_id;
 	uint visible_meshlets_buffer_id;
 	uint group_residency_buffer_id;
 };
 
+static StructuredBuffer<CullView> cull_views = ResourceDescriptorHeap[cull_views_buffer_id];
 static StructuredBuffer<MeshletCandidate> visible_meshlets_buffer = ResourceDescriptorHeap[visible_meshlets_buffer_id];
 static ByteAddressBuffer meshlets_geometry_buffer = ResourceDescriptorHeap[global_meshlets_geometry_buffer_id];
 static RWByteAddressBuffer group_residency_buffer = ResourceDescriptorHeap[group_residency_buffer_id];

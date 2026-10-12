@@ -1,30 +1,8 @@
-struct DDGICascade
+cbuffer DDGIAtlases : register(b2)
 {
-	float4 min;
-	float4 spacing;
-};
-
-struct DDGIVolume
-{
-	float3 origin;
-	float pad0;
-	int4 size; // cascade size (xyz), probes in cascade (w)
-	float3 spacing;
-	float pad2;
-	float3 random_vector;
-	float pad3;
-	float random_angle;
-	float use_relocation;
-	float use_classification;
-	uint cascades_count;
-	DDGICascade cascades[5];
-	uint rays_per_probe;
-	uint probes_to_update_buffer_ids;
-	uint ray_data_buffer_id;
-	uint distance_atlas_tex_id;
-	uint irradiance_atlas_tex_id;
-	uint metadata_atlas_tex_id;
-	float2 pad4;
+	uint ddgi_distance_atlas_tex_id;
+	uint ddgi_irradiance_atlas_tex_id;
+	uint ddgi_metadata_atlas_tex_id;
 };
 
 #define DISTANCE_TEXELS 12
@@ -109,7 +87,7 @@ float3 GetProbeWorldBasePosition(DDGIVolume volume, uint3 probe_coords, uint cas
 float3 GetProbeRelocationOffset(DDGIVolume volume, uint3 probe_coords, uint cascade)
 {
 	uint2 texel_coord = GetProbeStartTexelCoords(volume, probe_coords);
-	Texture2DArray<float4> metadata_atlas = ResourceDescriptorHeap[volume.metadata_atlas_tex_id];
+	Texture2DArray<float4> metadata_atlas = ResourceDescriptorHeap[ddgi_metadata_atlas_tex_id];
 	DDGICascade casc = volume.cascades[cascade];
 	return metadata_atlas.Load(uint4(texel_coord.xy, cascade, 0)).xyz * casc.spacing.xyz;
 }
@@ -125,7 +103,7 @@ float3 GetProbeRelocationOffset(DDGIVolume volume, uint3 probe_coords, uint casc
 uint GetProbeState(DDGIVolume volume, uint3 probe_coords, uint cascade)
 {
 	uint2 texel_coord = GetProbeStartTexelCoords(volume, probe_coords);
-	Texture2DArray<float4> metadata_atlas = ResourceDescriptorHeap[volume.metadata_atlas_tex_id];
+	Texture2DArray<float4> metadata_atlas = ResourceDescriptorHeap[ddgi_metadata_atlas_tex_id];
 	return metadata_atlas.Load(uint4(texel_coord.xy, cascade, 0)).a;
 }
 
@@ -320,7 +298,7 @@ float3 SampleIrradiance(float3 world_position, float3 world_normal, float3 surfa
 		float3 biased_to_probe_direction = normalize(biased_to_probe);
 		float2 probe_uv_distance = GetProbeUV(volume, probe_coords, -biased_to_probe_direction, DISTANCE_TEXELS);
 
-		Texture2DArray irradiance_atlas = ResourceDescriptorHeap[volume.irradiance_atlas_tex_id];
+		Texture2DArray irradiance_atlas = ResourceDescriptorHeap[ddgi_irradiance_atlas_tex_id];
 		float4 irradiance = irradiance_atlas.SampleLevel(linear_clamp_sampler, float3(probe_uv_irradiance, cascade_id), 0);
 
 		#if SRGB_BLENDING
@@ -345,7 +323,7 @@ float3 SampleIrradiance(float3 world_position, float3 world_normal, float3 surfa
 			float weight = (wrapShading * wrapShading);
 		#endif
 
-		Texture2DArray distance_atlas = ResourceDescriptorHeap[volume.distance_atlas_tex_id];
+		Texture2DArray distance_atlas = ResourceDescriptorHeap[ddgi_distance_atlas_tex_id];
 
 		// Sample the probe's distance texture to get the mean distance to nearby surfaces
 		float2 filtered_distance = distance_atlas.SampleLevel(linear_clamp_sampler, float3(probe_uv_distance, cascade_id), 0).rg;

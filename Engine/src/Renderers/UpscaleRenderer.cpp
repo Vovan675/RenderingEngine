@@ -44,17 +44,17 @@ void UpscaleRenderer::addPasses(FrameGraph &frame_graph)
 	if (!Renderer::isUpscalerActive())
 		return;
 
-	bool reset_history = !history_valid;
+	bool reset_history = !history_valid || gDynamicRHI->getFrame() != last_frame + 1;
 	history_valid = true;
+	last_frame = gDynamicRHI->getFrame();
 
 	GraphicsResourceName color_input = GFXOPTIONS(ssr).enabled ? GFXRID(SSR) : GFXRID(FinalNoPostTexture);
 
 	frame_graph.addCallbackPass("DLSS Upscale",
 	[&](RenderPassBuilder &builder)
 	{
-		auto &input_desc = builder.getTextureDescription(color_input);
-		if (!builder.isTextureCreated(GFXRID(UpscaledColor)))
-			builder.createTexture(GFXRID(UpscaledColor), Renderer::getOutputWidth(), Renderer::getOutputHeight(), input_desc.format);
+		TextureDescription input_desc = builder.getTextureDescription(color_input);
+		builder.createTexture(GFXRID(UpscaledColor), Renderer::getOutputWidth(), Renderer::getOutputHeight(), input_desc.format);
 
 		builder.readTexture(color_input);
 		builder.readTexture(GFXRID(GBufferDepth));

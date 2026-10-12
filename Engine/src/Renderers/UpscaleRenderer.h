@@ -18,5 +18,6 @@ public:
 
 private:
 	bool history_valid = false;
+	uint64_t last_frame = 0;
 	glm::ivec2 last_render_resolution = glm::ivec2(0);
 };

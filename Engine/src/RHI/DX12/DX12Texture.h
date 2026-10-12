@@ -19,7 +19,7 @@ public:
 
 	void fill() override;
 	void fill(const void *sourceData) override;
-	void clear(const glm::vec4 &color) override;
+	void clear(RHICommandList *cmd_list, const glm::vec4 &color) override;
 	void load(const char *path) override;
 	void loadEquirectangularCubemap(const char *path) override;
 

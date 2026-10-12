@@ -4,14 +4,12 @@
 
 struct MeshletCullDesc
 {
-	uint32_t pass_mask;
-	glm::mat4 view_projection;
-	uint32_t instance_count;
 	uint32_t view_id = 0;
+	uint32_t pass_mask;
+	uint32_t instance_count;
 	GraphicsResourceName hiz;
+	TextureDescription hiz_description{};
 	uint32_t hiz_layer = 0;
-	bool is_ortho = false;
-	bool near_clip = true;
 	bool reverse_z = true;
 	bool use_occlusion = true;
 };

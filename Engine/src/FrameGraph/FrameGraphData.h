@@ -5,6 +5,13 @@
 #define FinalTexture
 #define BackbufferTexture
 
+#define LightsBuffer
+#define OldLightsBuffer
+#define LightIndexMapping
+#define MaterialsBuffer
+#define InstancesBuffer
+#define MeshesBuffer
+#define CullViews
 #define InstancesPassMask
 
 // Persistent thread traversal
@@ -67,6 +74,35 @@
 #define DDGIDistance
 #define DDGIIrradiance
 #define DDGIMetadata
+#define DDGIRayData
+#define DDGIProbesToUpdate
+
+#define RTXDIPrevDepth
+#define RTXDIPrevNormal
+#define RTXDIPrevAlbedo
+#define RTXDIPrevShading
+
+#define NRDViewZ
+#define NRDNormalRoughness
+#define NRDMotion
+
+#define RTXDIDiffuseNoisy
+#define RTXDISpecularNoisy
+#define RTXDIDiffuseDenoised
+#define RTXDISpecularDenoised
+#define RTXDIReservoirs
+#define RTXDITemporalSamplePositions
+#define RTXDILuminance
+#define RTXDIPrevLuminance
+#define RTXDIGradients
+#define RTXDIDiffuseConfidence
+#define RTXDISpecularConfidence
+#define RTXDIPrevDiffuseConfidence
+#define RTXDIPrevSpecularConfidence
+
+#define NRDPermanent
+#define NRDTransient
+#define NRDValidation
 
 #define DebugLinesBuffer
 #define DebugLinesDrawArgsBuffer

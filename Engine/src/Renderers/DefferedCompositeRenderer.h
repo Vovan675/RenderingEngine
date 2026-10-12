@@ -1,19 +1,14 @@
 #pragma once
-#include "RendererBase.h"
+#include "Rendering/GlobalPipeline.h"
 #include "Rendering/Mesh.h"
 #include "Utils/Camera.h"
 #include "FrameGraph/FrameGraphData.h"
 #include "FrameGraph/FrameGraphRHIResources.h"
 #include "DDGIRenderer.h"
 
-class DefferedCompositeRenderer: public RendererBase
+class DefferedCompositeRenderer
 {
 public:
-	DefferedCompositeRenderer();
-	virtual ~DefferedCompositeRenderer();
-
 	void addPasses(FrameGraph &fg);
-
-private:
 };
 

@@ -4,6 +4,7 @@
 #include "DX12Utils.h"
 #include "RHI/DynamicRHI.h"
 #include "RHI/RHITexture.h"
+#include "DX12Texture.h"
 #include "RHI/RHIPipeline.h"
 #include <WinPixEventRuntime/pix3.h>
 #include "Utils/Math.h"
@@ -99,7 +100,7 @@ void DX12CommandList::setPipeline(RHIPipeline *pipeline)
 void DX12CommandList::setVertexBuffer(RHIBuffer *buffer, uint32_t offset, uint32_t stride, uint32_t slot)
 {
 	DX12Buffer *native_buffer = static_cast<DX12Buffer *>(buffer);
-	native_buffer->transitState(ResourceState::VERTEX_BUFFER);
+	native_buffer->transitState(this, ResourceState::VERTEX_BUFFER);
 	D3D12_VERTEX_BUFFER_VIEW view;
 	view.BufferLocation = native_buffer->getGPUAddress() + offset;
 	view.SizeInBytes = buffer->getSize() - offset;
@@ -110,7 +111,7 @@ void DX12CommandList::setVertexBuffer(RHIBuffer *buffer, uint32_t offset, uint32
 void DX12CommandList::setIndexBuffer(RHIBuffer *buffer, uint32_t offset, IndexFormat format)
 {
 	DX12Buffer *native_buffer = static_cast<DX12Buffer *>(buffer);
-	native_buffer->transitState(ResourceState::INDEX_BUFFER);
+	native_buffer->transitState(this, ResourceState::INDEX_BUFFER);
 	D3D12_INDEX_BUFFER_VIEW view;
 	view.BufferLocation = native_buffer->getGPUAddress() + offset;
 	view.SizeInBytes = buffer->getSize() - offset;
@@ -199,7 +200,7 @@ void DX12CommandList::fillBuffer(RHIBuffer *buffer, uint32_t value)
 	DX12Buffer *native_buffer = static_cast<DX12Buffer *>(buffer);
 	DX12BufferView *uav = static_cast<DX12BufferView *>(buffer->getUnorderedAccessView(true));
 
-	native_buffer->transitState(ResourceState::UAV);
+	native_buffer->transitState(this, ResourceState::UAV);
 
 	UINT values[4] = { value, value, value, value };
 	cmd_list->ClearUnorderedAccessViewUint(
@@ -214,10 +215,21 @@ void DX12CommandList::copyBuffer(RHIBuffer *src, RHIBuffer *dest, uint64_t src_o
 	DX12Buffer *native_src_buffer = (DX12Buffer *)src;
 	DX12Buffer *native_dst_buffer = (DX12Buffer *)dest;
 
-	native_src_buffer->transitState(ResourceState::COPY_SRC);
-	native_dst_buffer->transitState(ResourceState::COPY_DST);
+	native_src_buffer->transitState(this, ResourceState::COPY_SRC);
+	native_dst_buffer->transitState(this, ResourceState::COPY_DST);
 
 	cmd_list->CopyBufferRegion(native_dst_buffer->getResource(), dest_offset, native_src_buffer->getResource(), src_offset, size);
+}
+
+void DX12CommandList::copyTexture(RHITexture *src, RHITexture *dest)
+{
+	DX12Texture *native_src_texture = (DX12Texture *)src;
+	DX12Texture *native_dst_texture = (DX12Texture *)dest;
+
+	native_src_texture->transitLayout(this, TEXTURE_LAYOUT_TRANSFER_SRC);
+	native_dst_texture->transitLayout(this, TEXTURE_LAYOUT_TRANSFER_DST);
+
+	cmd_list->CopyResource(native_dst_texture->getResource(), native_src_texture->getResource());
 }
 
 

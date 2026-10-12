@@ -2,7 +2,8 @@
 
 cbuffer Uniforms : register(b0)
 {
-	float4x4 frustum_view_projection;
+	uint view_id;
+	uint cull_views_buffer_id;
 
 	uint visible_meshlets_buffer_id;
 	uint visible_meshlets_count_buffer_id;
@@ -21,6 +22,7 @@ cbuffer Uniforms : register(b0)
 	uint group_residency_buffer_id;
 };
 
+static StructuredBuffer<CullView> cull_views = ResourceDescriptorHeap[cull_views_buffer_id];
 static RWStructuredBuffer<MeshletCandidate> visible_meshlets = ResourceDescriptorHeap[visible_meshlets_buffer_id];
 static RWStructuredBuffer<uint> visible_meshlets_count = ResourceDescriptorHeap[visible_meshlets_count_buffer_id];
 static RWStructuredBuffer<MeshletCandidate> occluded_meshlets = ResourceDescriptorHeap[occluded_meshlets_buffer_id];
@@ -51,7 +53,7 @@ void CSMain(uint3 dispatch_id : SV_DispatchThreadID)
 
 	HizParams hiz = { hiz_tex_id, hiz_width, hiz_height, hiz_mips };
 	FrustumCullData cull;
-	if (!cullMeshletVisibility(meshlet, instance.world_transform, frustum_view_projection, hiz, cull))
+	if (!cullMeshletVisibility(meshlet, instance.world_transform, cull_views[view_id], hiz, cull))
 		return;
 
 	uint slot = appendVisibleMeshlet(candidate, visible_meshlets, visible_meshlets_count);

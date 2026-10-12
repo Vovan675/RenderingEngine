@@ -573,9 +573,14 @@ bool UI::drawStruct(const StructInfo &info, void *object)
 
 		eastl::string label = field.displayLabel ? field.displayLabel : prettifyName(field.name);
 
-		ImGui::BeginDisabled(!field.isEditable(object));
+		bool is_active = field.isActive(object);
+		if (!is_active)
+			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().DisabledAlpha);
+		ImGui::BeginDisabled(field.isReadOnly);
 		changed |= drawField(field, label.c_str(), field.getAddress(object), object);
 		ImGui::EndDisabled();
+		if (!is_active)
+			ImGui::PopStyleVar();
 	}
 
 	while (!open_categories.empty())

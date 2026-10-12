@@ -106,21 +106,28 @@ void VulkanTexture::fill(const void *sourceData)
 	vmaFreeMemory(VulkanUtils::getNativeRHI()->allocator, stagingAllocation);
 }
 
-void VulkanTexture::clear(const glm::vec4 &color)
+void VulkanTexture::clear(RHICommandList *cmd_list, const glm::vec4 &color)
 {
-	RHICommandList *cmd_list = gDynamicRHI->getCmdList();
 	VulkanCommandList *native_cmd_list = (VulkanCommandList *)cmd_list;
 
 	transitLayout(cmd_list, TEXTURE_LAYOUT_TRANSFER_DST);
-
-	VkClearColorValue clear_value;
-	memcpy(clear_value.float32, &color.x, sizeof(clear_value.float32));
 
 	VkImageSubresourceRange range{};
 	range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	range.levelCount = description.mip_levels;
 	range.layerCount = description.is_cube ? 6 : description.array_levels;
 
+	if (isDepthTexture())
+	{
+		range.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+		VkClearDepthStencilValue clear_value{};
+		clear_value.depth = color.x;
+		vkCmdClearDepthStencilImage(native_cmd_list->cmd_buffer, image->resource, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear_value, 1, &range);
+		return;
+	}
+
+	VkClearColorValue clear_value;
+	memcpy(clear_value.float32, &color.x, sizeof(clear_value.float32));
 	vkCmdClearColorImage(native_cmd_list->cmd_buffer, image->resource, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear_value, 1, &range);
 }
 
@@ -197,7 +204,7 @@ void VulkanTexture::transitLayout(RHICommandList *cmd_list, TextureLayoutType ne
 	size_t end_index = mip == -1 ? description.mip_levels : start_index + 1;
 	for (size_t i = start_index; i < end_index; i++)
 	{
-		if (current_layouts[i] != new_layout_type || new_layout_type == TextureLayoutType::TEXTURE_LAYOUT_UAV)
+		if (current_layouts[i] != new_layout_type || new_layout_type == TEXTURE_LAYOUT_UAV || new_layout_type == TEXTURE_LAYOUT_ATTACHMENT)
 		{
 			barriers_required = true;
 			difference_mip_index = i;
@@ -306,7 +313,7 @@ void VulkanTexture::transitLayout(RHICommandList *cmd_list, TextureLayoutType ne
 			break;
 		case TEXTURE_LAYOUT_UAV:
 			dst_stage_mask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-			dst_access_mask = VK_ACCESS_2_SHADER_READ_BIT;
+			dst_access_mask = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
 			break;
 		default:
 			ENGINE_ASSERT(false);

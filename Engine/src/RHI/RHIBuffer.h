@@ -2,6 +2,7 @@
 #include "RHIDefinitions.h"
 
 class RHIBufferView;
+class RHICommandList;
 class RHIBuffer : public RefCounted
 {
 public:
@@ -19,7 +20,7 @@ public:
 	virtual void setDebugName(const char *name) = 0;
 	virtual uint64_t getGPUAddress() const = 0;
 
-	virtual void transitState(ResourceState new_state) = 0;
+	virtual void transitState(RHICommandList *cmd_list, ResourceState new_state) = 0;
 
 	virtual bool isValid() const { return true; }
 

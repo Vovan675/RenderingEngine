@@ -221,8 +221,8 @@ void VulkanBindlessResources::init()
 	// We dont fully fill array, so we need partial bound. Also update after binding can be used
 	eastl::array<VkDescriptorBindingFlags, 2> binding_flags =
 	{
-		VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT,
-		VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT,
+		VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT,
+		VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT,
 	};
 	extended_info.pBindingFlags = binding_flags.data();
 	
@@ -262,14 +262,6 @@ void VulkanBindlessResources::init()
 	bindless_alloc_info.descriptorPool = bindless_pool;
 	bindless_alloc_info.descriptorSetCount = 1;
 	bindless_alloc_info.pSetLayouts = &bindless_layout.layout;
-
-	VkDescriptorSetVariableDescriptorCountAllocateInfo count_info{};
-	count_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO_EXT;
-	count_info.descriptorSetCount = 1;
-	uint32_t max_binding = MAX_BINDLESS_RESOURCES - 1;
-	count_info.pDescriptorCounts = &max_binding;
-
-	bindless_alloc_info.pNext = &count_info;
 
 	CHECK_ERROR(vkAllocateDescriptorSets(VulkanUtils::getNativeRHI()->device->logicalHandle, &bindless_alloc_info, &bindless_set));
 

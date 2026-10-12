@@ -119,8 +119,12 @@ void MeshletPass::add_instance_culling_pass(FrameGraph &fg, const MeshletCullDes
 		builder.writeBuffer(GFXRID_ID(OccludedInstances, view_id));
 		builder.writeBuffer(GFXRID_ID(OccludedInstancesCount, view_id));
 		builder.readBuffer(GFXRID(InstancesPassMask));
+		builder.readBuffer(GFXRID(CullViews));
 		if (desc.use_occlusion)
+		{
+			builder.createPersistentTexture(desc.hiz, desc.hiz_description);
 			builder.readTexture(desc.hiz);
+		}
 		if (is_fix)
 			builder.readIndirectArgsBuffer(GFXRID_ID(InstanceFixDispatchArgs, view_id));
 	},
@@ -129,8 +133,6 @@ void MeshletPass::add_instance_culling_pass(FrameGraph &fg, const MeshletCullDes
 		gGlobalPipeline->setupComputePipeline(gDynamicRHI->createShader(L"shaders/gpu_driven/meshlet_cull_instances.hlsl", COMPUTE_SHADER, "CSMain",
 											  {
 												  {"IS_FIX", is_fix ? "1" : "0"},
-												  {"IS_ORTHO_FRUSTUM", desc.is_ortho ? "1" : "0"},
-												  {"DISABLE_NEAR_CLIP", desc.near_clip ? "0" : "1"},
 												  {"REVERSE_Z", desc.reverse_z ? "1" : "0"},
 												  {"USE_OCCLUSION", desc.use_occlusion ? "1" : "0"},
 												  {"HIZ_OCCLUSION_DEBUG", render_culling_hiz_debug ? "1" : "0"},
@@ -140,7 +142,8 @@ void MeshletPass::add_instance_culling_pass(FrameGraph &fg, const MeshletCullDes
 
 		struct
 		{
-			glm::mat4 frustum_view_projection;
+			uint32_t view_id;
+			uint32_t cull_views_buffer_id;
 			uint32_t traversal_queue_buffer_id;
 			uint32_t traversal_ctrl_buffer_id;
 			uint32_t occluded_instances_buffer_id;
@@ -153,7 +156,8 @@ void MeshletPass::add_instance_culling_pass(FrameGraph &fg, const MeshletCullDes
 			uint32_t hiz_mips;
 			uint32_t current_pass_mask;
 		} constants = {};
-		constants.frustum_view_projection = desc.view_projection;
+		constants.view_id = view_id;
+		constants.cull_views_buffer_id = resources.getReadBuffer(GFXRID(CullViews));
 		constants.traversal_queue_buffer_id = resources.getReadWriteBuffer(GFXRID_ID(TraversalQueue, view_id));
 		constants.traversal_ctrl_buffer_id = resources.getReadWriteBuffer(GFXRID_ID(TraversalCtrl, view_id));
 		constants.occluded_instances_buffer_id = resources.getReadWriteBuffer(GFXRID_ID(OccludedInstances, view_id));
@@ -208,6 +212,7 @@ void MeshletPass::add_traversal_pass(FrameGraph &fg, const MeshletCullDesc &desc
 		builder.writeBuffer(GFXRID(GroupResidencyBuffer));
 		builder.writeBuffer(GFXRID(StreamRequestsBuffer));
 		builder.writeBuffer(GFXRID(GroupAgesBuffer));
+		builder.readBuffer(GFXRID(CullViews));
 
 		if (!render_meshlets_mesh_shaders)
 		{
@@ -225,8 +230,6 @@ void MeshletPass::add_traversal_pass(FrameGraph &fg, const MeshletCullDesc &desc
 											  {
 												  {"USE_MESH_SHADERS", render_meshlets_mesh_shaders ? "1" : "0"},
 												  {"IS_FIX", is_fix ? "1" : "0"},
-												  {"IS_ORTHO_FRUSTUM", desc.is_ortho ? "1" : "0"},
-												  {"DISABLE_NEAR_CLIP", desc.near_clip ? "0" : "1"},
 												  {"REVERSE_Z", desc.reverse_z ? "1" : "0"},
 												  {"USE_OCCLUSION", desc.use_occlusion ? "1" : "0"},
 												  {"THREADGROUP_SIZE", std::to_string(MESHLET_CULLING_THREADGROUP_SIZE).c_str()}
@@ -235,7 +238,8 @@ void MeshletPass::add_traversal_pass(FrameGraph &fg, const MeshletCullDesc &desc
 
 		struct
 		{
-			glm::mat4 frustum_view_projection;
+			uint32_t view_id;
+			uint32_t cull_views_buffer_id;
 			uint32_t queue_buffer_id;
 			uint32_t traversal_ctrl_buffer_id;
 			uint32_t visible_meshlets_buffer_id;
@@ -254,7 +258,8 @@ void MeshletPass::add_traversal_pass(FrameGraph &fg, const MeshletCullDesc &desc
 			uint32_t stream_requests_buffer_id;
 			uint32_t group_ages_buffer_id;
 		} constants = {};
-		constants.frustum_view_projection = desc.view_projection;
+		constants.view_id = view_id;
+		constants.cull_views_buffer_id = resources.getReadBuffer(GFXRID(CullViews));
 		constants.queue_buffer_id = resources.getReadWriteBuffer(GFXRID_ID(TraversalQueue, view_id));
 		constants.traversal_ctrl_buffer_id = resources.getReadWriteBuffer(GFXRID_ID(TraversalCtrl, view_id));
 		constants.max_queue_size = MAX_TRAVERSAL_TASKS;
@@ -305,6 +310,7 @@ void MeshletPass::add_meshlet_fix_pass(FrameGraph &fg, const MeshletCullDesc &de
 			builder.writeBuffer(GFXRID_ID(DrawCallsInstances, view_id));
 		}
 		builder.readIndirectArgsBuffer(GFXRID_ID(MeshletFixDispatchArgs, view_id));
+		builder.readBuffer(GFXRID(CullViews));
 		builder.readTexture(desc.hiz);
 	},
 	[=](const RenderPassResources &resources, RHICommandList *cmd_list)
@@ -312,8 +318,6 @@ void MeshletPass::add_meshlet_fix_pass(FrameGraph &fg, const MeshletCullDesc &de
 		gGlobalPipeline->setupComputePipeline(gDynamicRHI->createShader(L"shaders/gpu_driven/meshlet_cull_fix.hlsl", COMPUTE_SHADER, "CSMain",
 											  {
 												  {"USE_MESH_SHADERS", render_meshlets_mesh_shaders ? "1" : "0"},
-												  {"IS_ORTHO_FRUSTUM", desc.is_ortho ? "1" : "0"},
-												  {"DISABLE_NEAR_CLIP", desc.near_clip ? "0" : "1"},
 												  {"REVERSE_Z", desc.reverse_z ? "1" : "0"},
 												  {"USE_OCCLUSION", desc.use_occlusion ? "1" : "0"},
 												  {"THREADGROUP_SIZE", std::to_string(MESHLET_FIX_THREADGROUP_SIZE).c_str()}
@@ -322,7 +326,8 @@ void MeshletPass::add_meshlet_fix_pass(FrameGraph &fg, const MeshletCullDesc &de
 
 		struct
 		{
-			glm::mat4 frustum_view_projection;
+			uint32_t view_id;
+			uint32_t cull_views_buffer_id;
 			uint32_t visible_meshlets_buffer_id;
 			uint32_t visible_meshlets_count_buffer_id;
 			uint32_t draw_indexed_args_buffer_id;
@@ -336,7 +341,8 @@ void MeshletPass::add_meshlet_fix_pass(FrameGraph &fg, const MeshletCullDesc &de
 			uint32_t hiz_mips;
 			uint32_t group_residency_buffer_id;
 		} constants = {};
-		constants.frustum_view_projection = desc.view_projection;
+		constants.view_id = view_id;
+		constants.cull_views_buffer_id = resources.getReadBuffer(GFXRID(CullViews));
 		constants.visible_meshlets_buffer_id = resources.getReadWriteBuffer(GFXRID_ID(VisibleMeshlets, view_id));
 		constants.visible_meshlets_count_buffer_id = resources.getReadWriteBuffer(GFXRID_ID(VisibleMeshletsCount, view_id));
 		constants.occluded_meshlets_buffer_id = resources.getReadWriteBuffer(GFXRID_ID(OccludedMeshlets, view_id));

@@ -24,7 +24,7 @@ public:
 		return resource->resource->GetGPUVirtualAddress();
 	}
 
-	void transitState(ResourceState new_state) override;
+	void transitState(RHICommandList *cmd_list, ResourceState new_state) override;
 
 	bool isValid() const override { return resource != nullptr; }
 

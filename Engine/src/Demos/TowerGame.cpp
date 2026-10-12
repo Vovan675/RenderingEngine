@@ -242,8 +242,6 @@ void TowerGame::update(float dt)
 	camera.update(dt, gInput.getMousePosition(), mouse_pressed);
 	camera.updateMatrices();
 
-	Renderer::updateDefaultUniforms(dt);
-
 	static bool prev_down = false;
 	bool current_down = gInput.isMouseKeyDown(GLFW_MOUSE_BUTTON_2);
 	if (current_down && !prev_down && !isGameOver)

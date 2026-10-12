@@ -32,8 +32,7 @@ void LutRenderer::addPasses(FrameGraph &fg)
 
 		cmd_list->setRenderTargets({brdf_lut}, nullptr, -1, 0, true);
 
-		auto &p = gGlobalPipeline;
-		p->bindScreenQuadPipeline(cmd_list, gDynamicRHI->createShader(L"shaders/ibl/brdf_lut.hlsl", FRAGMENT_SHADER));
+		gGlobalPipeline->bindScreenQuadPipeline(cmd_list, gDynamicRHI->createShader(L"shaders/ibl/brdf_lut.hlsl", FRAGMENT_SHADER));
 
 		// Render quad
 		cmd_list->drawInstanced(6, 1, 0, 0);

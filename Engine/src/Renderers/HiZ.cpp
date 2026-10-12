@@ -8,35 +8,19 @@ namespace
 constexpr uint32_t HIZ_THREADGROUP_SIZE = 32;
 }
 
-void HiZ::createOrImport(FrameGraph &fg, RHITextureRef &texture, GraphicsResourceName name, glm::ivec2 size, uint32_t layers)
+TextureDescription HiZ::createDescription(glm::ivec2 size, uint32_t layers)
 {
 	glm::ivec2 mip_dimensions = glm::max(glm::ceil(glm::log2(glm::vec2(size))), glm::vec2(1.0f));
-	uint32_t mip_levels = std::max(mip_dimensions.x, mip_dimensions.y);
-	uint32_t width = 1u << (mip_dimensions.x - 1);
-	uint32_t height = 1u << (mip_dimensions.y - 1);
 
-	bool need_realloc = !texture
-		|| texture->getWidth() != width
-		|| texture->getHeight() != height
-		|| texture->getMipLevels() != mip_levels
-		|| texture->getArrayLevels() != layers;
-
-	if (need_realloc)
-	{
-		TextureDescription desc;
-		desc.format = FORMAT_R32_SFLOAT;
-		desc.width = width;
-		desc.height = height;
-		desc.mip_levels = mip_levels;
-		desc.array_levels = layers;
-		desc.usage_flags = TEXTURE_USAGE_STORAGE;
-		desc.filtering = FILTER_NEAREST;
-		texture = gDynamicRHI->createTexture(desc);
-		texture->fill();
-		texture->setDebugName(name.name);
-	}
-
-	fg.importTexture(name, texture);
+	TextureDescription desc;
+	desc.format = FORMAT_R32_SFLOAT;
+	desc.width = 1u << (mip_dimensions.x - 1);
+	desc.height = 1u << (mip_dimensions.y - 1);
+	desc.mip_levels = std::max(mip_dimensions.x, mip_dimensions.y);
+	desc.array_levels = layers;
+	desc.usage_flags = TEXTURE_USAGE_STORAGE;
+	desc.filtering = FILTER_NEAREST;
+	return desc;
 }
 
 void HiZ::build(FrameGraph &fg, GraphicsResourceName hiz_name, GraphicsResourceName depth_name, uint32_t layer, bool is_depth_reverse_z)

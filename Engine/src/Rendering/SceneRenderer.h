@@ -8,7 +8,6 @@
 #include "renderers/IrradianceRenderer.h"
 #include "renderers/PrefilterRenderer.h"
 #include "renderers/SkyRenderer.h"
-#include "renderers/MeshRenderer.h"
 #include "imgui/ImGuiWrapper.h"
 #include "renderers/GBufferPass.h"
 #include "renderers/DefferedLightingRenderer.h"
@@ -20,10 +19,13 @@
 #include "renderers/SSRRenderer.h"
 #include "renderers/DDGIRenderer.h"
 #include "renderers/UpscaleRenderer.h"
+#include "renderers/RTXDIRenderer.h"
 
 #include "renderers/PathTracingRenderer.h"
 #include "ShaderStructs.h"
 #include "GpuTable.h"
+#include "FrameGraph/PersistentResources.h"
+#include "FrameGraph/TransientResources.h"
 
 class Asset;
 
@@ -61,17 +63,26 @@ public:
 	Ref<Scene> scene;
 	Ref<RayTracingScene> rt_scene;
 	GeometryStreaming geometry_streaming;
+	PersistentResources persistent_resources;
+	TransientResources transient_resources;
+	PassConstants pass_constants{};
+	uint64_t last_update_frame = UINT64_MAX;
 
-	eastl::vector<FrustumDataGPU> frustums;
+	uint32_t main_view_id = 0;
 	eastl::vector<LightGPU> lights;
+	eastl::vector<LightGPU> old_lights;
+	eastl::hash_map<entt::entity, uint32_t> old_light_indices;
+	LightTableLayout lights_layout;
 	uint32_t sun_light_index = INVALID_LIGHT_INDEX;
 
 	struct InstanceRange { uint32_t start; uint32_t count; };
 	eastl::hash_map<entt::entity, InstanceRange> entity_instances;
 	eastl::hash_set<entt::entity> moved_last_frame_entities;
 
-	GpuTable<FrustumDataGPU> frustums_table;
+	GpuTable<CullViewGPU> cull_views_table;
 	GpuTable<LightGPU> lights_table;
+	GpuTable<LightGPU> old_lights_table;
+	GpuTable<uint32_t> light_index_mapping_table;
 	GpuTable<MaterialGPU> materials_table;
 	GpuTable<InstanceGPU> instances_table;
 	GpuTable<MeshGPU> meshes_table;
@@ -86,6 +97,7 @@ public:
 
 	SkyRenderer sky_renderer;
 	DefferedLightingRenderer defferred_lighting_renderer;
+	RTXDIRenderer rtxdi_renderer;
 	DefferedCompositeRenderer deffered_composite_renderer;
 	PostProcessingRenderer post_renderer;
 	DebugRenderer debug_renderer;

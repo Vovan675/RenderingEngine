@@ -151,9 +151,10 @@ sl::FrameToken *StreamlineWrapper::setFrameConstants(const sl::ViewportHandle &v
 	last_frame = current_frame;
 
 	Camera *camera = Renderer::getCamera();
-	glm::mat4 projection = camera->getProj();
-	glm::mat4 clip_to_prev_clip = Renderer::getOldViewProjection() * glm::inverse(camera->getViewProj());
-	glm::vec2 jitter = Renderer::getJitter();
+	const PassConstants &pass_constants = Renderer::getPassConstants();
+	glm::mat4 projection = pass_constants.projection_unjittered;
+	glm::mat4 clip_to_prev_clip = pass_constants.old_view_projection_unjittered * glm::inverse(pass_constants.view_projection_unjittered);
+	glm::vec2 jitter = pass_constants.jitter;
 
 	sl::Constants constants{};
 	constants.cameraViewToClip = to_sl_matrix(projection);

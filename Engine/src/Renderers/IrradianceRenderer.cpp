@@ -5,7 +5,7 @@
 #include "Rendering/Model.h"
 #include "FrameGraph/FrameGraphData.h"
 
-IrradianceRenderer::IrradianceRenderer(): RendererBase()
+IrradianceRenderer::IrradianceRenderer()
 {
 	compute_shader = gDynamicRHI->createShader(L"shaders/ibl/irradiance.hlsl", COMPUTE_SHADER);
 
@@ -33,7 +33,6 @@ void IrradianceRenderer::addPass(FrameGraph &fg, uint32_t samples_count)
 	[=](const RenderPassResources &resources, RHICommandList *cmd_list)
 	{
 		auto irradiance = resources.getTexture(GFXRID(IBLIrradiance));
-		auto sky = resources.getTexture(GFXRID(Sky));
 
 		// Very heavy computation
 		gGlobalPipeline->setupComputePipeline(compute_shader);

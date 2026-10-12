@@ -116,6 +116,14 @@ DynamicRHI::CompileShaderResult DynamicRHI::compile_shader(eastl::wstring path, 
 
 	args.push_back(DXC_ARG_PACK_MATRIX_COLUMN_MAJOR);
 
+	// Third party libraries
+	args.push_back(L"-I");
+	args.push_back(L"../vendor/rtxdi/Include");
+	args.push_back(L"-I");
+	args.push_back(L"../vendor/nrd/Shaders");
+	args.push_back(L"-I");
+	args.push_back(L"../vendor/MathLib");
+
 	eastl::wstring bindless_resource_heap_binding = eastl::to_wstring(BINDLESS_RESOURCES_BINDING);
 	eastl::wstring bindless_resource_heap_set = eastl::to_wstring(BINDLESS_RESOURCES_SET);
 

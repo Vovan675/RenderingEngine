@@ -2,14 +2,16 @@
 #include "../bindless.h"
 #include "ddgi_common.hlsl"
 
-static StructuredBuffer<DDGIVolume> volumes = ResourceDescriptorHeap[ddgi_volume_buffer_id];
-static DDGIVolume volume = volumes[0];
-static StructuredBuffer<uint> probes_to_update = ResourceDescriptorHeap[volume.probes_to_update_buffer_ids];
+static DDGIVolume volume = ddgi_volume;
 
 cbuffer Constants : register(b1)
 {
 	uint output_atlas_tex_id;
+	uint ray_data_buffer_id;
+	uint probes_to_update_buffer_id;
 };
+
+static StructuredBuffer<uint> probes_to_update = ResourceDescriptorHeap[probes_to_update_buffer_id];
 
 #ifdef IRRADIANCE
 	[[vk::image_format("rgba16f")]]
@@ -84,7 +86,7 @@ void CSMain(CSInput input)
 		int max_back_faces = int(float(volume.rays_per_probe) * BACKFACE_THRESHOLD_UPDATE);
 		int back_face_count = 0;
 		
-		StructuredBuffer<float4> ray_data_buffer = ResourceDescriptorHeap[volume.ray_data_buffer_id];
+		StructuredBuffer<float4> ray_data_buffer = ResourceDescriptorHeap[ray_data_buffer_id];
 		for (; ray_index < volume.rays_per_probe; ray_index++)
 		{
 			uint ray_data_index = GetRayDataIndex(probe_id, ray_index, volume);
@@ -129,7 +131,7 @@ void CSMain(CSInput input)
 		float2 distance_average = float2(0, 0);
 		float weight_sum = 0;
 
-		StructuredBuffer<float4> ray_data_buffer = ResourceDescriptorHeap[volume.ray_data_buffer_id];
+		StructuredBuffer<float4> ray_data_buffer = ResourceDescriptorHeap[ray_data_buffer_id];
 		for (; ray_index < volume.rays_per_probe; ray_index++)
 		{
 			uint ray_data_index = GetRayDataIndex(probe_id, ray_index, volume);
@@ -150,10 +152,11 @@ void CSMain(CSInput input)
 
 		distance_average /= weight_sum;
 
+		float2 prev = output_atlas[texel_coord];
 		float blend_factor = DEFAULT_BLEND_FACTOR;
+		if (dot(prev, prev) == 0) blend_factor = 0;
 		float blend_weight = saturate(1.0f - blend_factor);
 
-		float2 prev = output_atlas[texel_coord];
 		float2 result = lerp(prev, distance_average, blend_weight);
 		output_atlas[texel_coord] = result;
 	#endif

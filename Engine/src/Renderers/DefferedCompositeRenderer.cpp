@@ -1,17 +1,10 @@
 #include "pch.h"
 #include "DefferedCompositeRenderer.h"
+#include "DDGIRenderer.h"
 #include "imgui.h"
 #include "RHI/BindlessResources.h"
 #include "Rendering/Renderer.h"
 #include "Core/Variables.h"
-
-DefferedCompositeRenderer::DefferedCompositeRenderer()
-{
-}
-
-DefferedCompositeRenderer::~DefferedCompositeRenderer()
-{
-}
 
 void DefferedCompositeRenderer::addPasses(FrameGraph &fg)
 {
@@ -38,6 +31,9 @@ void DefferedCompositeRenderer::addPasses(FrameGraph &fg)
 
 		if (builder.isTextureCreated(GFXRID(SSR)))
 			builder.readTexture(GFXRID(SSR));
+
+		if (builder.isTextureCreated(GFXRID(DDGIIrradiance)))
+			DDGIRenderer::readAtlases(builder);
 	},
 	[=](const RenderPassResources &resources, RHICommandList *cmd_list)
 	{
@@ -77,15 +73,18 @@ void DefferedCompositeRenderer::addPasses(FrameGraph &fg)
 		if (resources.has(GFXRID(SSR)))
 			ubo.ssr_tex_id = resources.getReadTexture(GFXRID(SSR));
 
+		bool ddgi = resources.has(GFXRID(DDGIIrradiance));
 		auto shader = gDynamicRHI->createShader(L"shaders/composite_indirect.hlsl", FRAGMENT_SHADER, "PSMain", {
 			{"SSR", ubo.ssr_tex_id ? "1" : "0"},
 			{"SSAO", ubo.ssao_tex_id ? "1" : "0"},
+			{"DDGI", ddgi ? "1" : "0"},
 		});
-		
-		auto &p = gGlobalPipeline;
-		p->bindScreenQuadPipeline(cmd_list, shader);
+
+		gGlobalPipeline->bindScreenQuadPipeline(cmd_list, shader);
 
 		gDynamicRHI->setConstantBufferData(0, &ubo, sizeof(UBO));
+		if (ddgi)
+			DDGIRenderer::setAtlasConstants(resources);
 
 		// Render quad
 		cmd_list->drawInstanced(6, 1, 0, 0);
@@ -129,8 +128,7 @@ void DefferedCompositeRenderer::addPasses(FrameGraph &fg)
 		ubo.albedo_tex_id = resources.getReadTexture(GFXRID(GBufferAlbedo));
 		ubo.depth_tex_id = resources.getReadTexture(GFXRID(GBufferDepth));
 
-		auto &p = gGlobalPipeline;
-		p->bindScreenQuadPipeline(cmd_list, gDynamicRHI->createShader(L"shaders/deffered_composite.hlsl", FRAGMENT_SHADER));
+		gGlobalPipeline->bindScreenQuadPipeline(cmd_list, gDynamicRHI->createShader(L"shaders/deffered_composite.hlsl", FRAGMENT_SHADER));
 
 		gDynamicRHI->setConstantBufferData(0, &ubo, sizeof(UBO));
 

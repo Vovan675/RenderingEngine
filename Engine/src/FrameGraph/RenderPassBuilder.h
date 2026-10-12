@@ -7,17 +7,24 @@ class FrameGraph;
 class RenderPassBuilder
 {
 public:
-	FrameGraphTextureId createTexture(GraphicsResourceName name, uint32_t width, uint32_t height, Format format);
 	FrameGraphTextureId createTexture(GraphicsResourceName name, TextureDescription desc);
+	FrameGraphTextureId createTexture(GraphicsResourceName name, uint32_t width, uint32_t height, Format format);
 	FrameGraphBufferId createBuffer(GraphicsResourceName name, size_t stride, size_t count, BufferUsage usage);
+
+	bool createPersistentTexture(GraphicsResourceName name, TextureDescription desc);
+	bool createPersistentTexture(GraphicsResourceName name, uint32_t width, uint32_t height, Format format);
+	bool createPersistentBuffer(GraphicsResourceName name, size_t stride, size_t count, BufferUsage usage);
 
 	FrameGraphTextureId readTexture(GraphicsResourceName texture);
 	FrameGraphTextureId readDepthTexture(GraphicsResourceName texture);
+	FrameGraphTextureId readCopyTexture(GraphicsResourceName texture);
 
 	FrameGraphTextureId writeTexture(GraphicsResourceName name);
 	FrameGraphTextureId writeUAVTexture(GraphicsResourceName name);
+	FrameGraphTextureId writeCopyTexture(GraphicsResourceName name);
 
 	FrameGraphBufferId writeBuffer(GraphicsResourceName name);
+	FrameGraphBufferId writeCopyBuffer(GraphicsResourceName name);
 	FrameGraphBufferId readBuffer(GraphicsResourceName name);
 	FrameGraphBufferId readIndirectArgsBuffer(GraphicsResourceName name);
 	FrameGraphBufferId readVertexBuffer(GraphicsResourceName name);

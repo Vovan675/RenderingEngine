@@ -1,6 +1,6 @@
 #pragma once
 
-#include "RendererBase.h"
+#include "Rendering/GlobalPipeline.h"
 #include "Rendering/Mesh.h"
 #include "Utils/Camera.h"
 #include "FrameGraph/FrameGraphData.h"
@@ -9,7 +9,7 @@
 #include "Core/Variables.h"
 #include "Rendering/ShaderStructs.h"
 
-class SkyRenderer: public RendererBase
+class SkyRenderer
 {
 public:
 	SkyRenderer();

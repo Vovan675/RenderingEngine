@@ -190,6 +190,9 @@ void RenderSettingsPanel::renderImGui(EditorContext &context)
 
 		if (ImGui::BeginTabItem("Lighting"))
 		{
+			ImGui::BeginDisabled(GFXOPTIONS(path_tracing));
+			UI::drawStruct(GFXOPTIONS(lighting));
+			ImGui::EndDisabled();
 			UI::drawStruct(GFXOPTIONS(sky));
 			UI::drawStruct(GFXOPTIONS(shadows));
 			UI::drawStruct(GFXOPTIONS(ddgi));

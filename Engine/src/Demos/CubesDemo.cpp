@@ -303,7 +303,9 @@ void RenderTargetsDemo::render(RHICommandList *cmd_list)
 // Use framegraph for rendering
 void RenderTargetsDemo::renderFrameGraph(RHICommandList *cmd_list)
 {
-	FrameGraph fg;
+	persistent_resources.deleteUndeclared();
+	transient_resources.deleteUnused();
+	FrameGraph fg(persistent_resources, transient_resources);
 
 	auto swapchain_texture = gDynamicRHI->getCurrentSwapchainTexture();
 

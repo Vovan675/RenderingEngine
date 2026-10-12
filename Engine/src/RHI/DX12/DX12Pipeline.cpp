@@ -259,7 +259,7 @@ void DX12Pipeline::create(const PipelineDescription &description)
 			D3D12_RENDER_TARGET_BLEND_DESC &rt = blend_state.RenderTarget[i];
 			rt.BlendEnable = description.use_blending;
 			rt.LogicOpEnable = false;
-			rt.SrcBlend = getBlend(description.src_alpha_blend);
+			rt.SrcBlend = getBlend(description.src_color_blend);
 			rt.DestBlend = getBlend(description.dst_color_blend);
 			rt.BlendOp = getBlendOp(description.color_blend_op);
 			rt.SrcBlendAlpha = getBlend(description.src_alpha_blend);

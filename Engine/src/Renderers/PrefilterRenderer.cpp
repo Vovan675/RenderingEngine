@@ -5,7 +5,7 @@
 #include "Rendering/Model.h"
 #include "FrameGraph/FrameGraphData.h"
 
-PrefilterRenderer::PrefilterRenderer(): RendererBase()
+PrefilterRenderer::PrefilterRenderer()
 {
 	compute_shader = gDynamicRHI->createShader(L"shaders/ibl/prefilter.hlsl", COMPUTE_SHADER);
 
@@ -33,7 +33,6 @@ void PrefilterRenderer::addPass(FrameGraph &fg, uint32_t samples_count)
 	[=](const RenderPassResources &resources, RHICommandList *cmd_list)
 	{
 		auto prefilter = resources.getTexture(GFXRID(IBLPrefilter));
-		auto sky = resources.getTexture(GFXRID(Sky));
 
 		const int MIP_COUNT = 5;
 

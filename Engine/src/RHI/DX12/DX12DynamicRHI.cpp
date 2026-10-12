@@ -364,9 +364,9 @@ RHITopLevelAccelerationStructureRef DX12DynamicRHI::createTopLevelAccelerationSt
 
 void DX12DynamicRHI::waitGPU()
 {
-	const UINT64 current_fence_value = fenceValues[frame_in_flight] + MAX_FRAMES_IN_FLIGHT;
-	cmd_queue->signal(current_fence_value);
-	cmd_queue->wait(current_fence_value);
+	cmd_queue->signal(fenceValues[frame_in_flight]);
+	cmd_queue->wait(fenceValues[frame_in_flight]);
+	fenceValues[frame_in_flight]++;
 }
 
 void DX12DynamicRHI::prepareRenderCall()

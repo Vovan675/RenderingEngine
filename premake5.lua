@@ -42,6 +42,22 @@ IncludeDir["Tracy"] = "vendor/tracy"
 IncludeDir["WinPixRuntime"] = "vendor/WinPixEventRuntime"
 IncludeDir["Compressonator"] = "vendor/Compressonator/include"
 IncludeDir["Streamline"] = "vendor/streamline/include"
+IncludeDir["Rtxdi"] = "vendor/rtxdi/Include"
+IncludeDir["Nrd"] = "vendor/nrd/Include"
+IncludeDir["MathLib"] = "vendor/MathLib"
+IncludeDir["ShaderMake"] = "vendor/ShaderMake"
+
+-- NRD does it using cmake
+io.writefile("vendor/nrd/Shaders/NRDConfig.hlsli", [[
+	#define NRD_NORMAL_ENCODING 3
+	#define NRD_ROUGHNESS_ENCODING 1
+	#define NRD_SUPPORTS_VIEWPORT_OFFSET 0
+	#define NRD_SUPPORTS_CHECKERBOARD 1
+	#define NRD_SUPPORTS_HISTORY_CONFIDENCE 1
+	#define NRD_SUPPORTS_DISOCCLUSION_THRESHOLD_MIX 1
+	#define NRD_SUPPORTS_ANTIFIREFLY 1
+	#define REBLUR_PERFORMANCE_MODE 0
+]])
 
 LibDir = {}
 LibDir["Vulkan"] = "%{VULKAN_SDK}/Lib"
@@ -98,6 +114,8 @@ project "Engine"
 		--"%{IncludeDir.SPIRV_Reflect}/spirv_reflect.c",
 		"%{IncludeDir.SPIRV_Reflect}/spirv_reflect.cpp",
 		"%{IncludeDir.Tracy}/TracyClient.cpp",
+		"vendor/rtxdi/Source/**.cpp",
+		"vendor/nrd/Source/**.cpp",
 	}
 
 	includedirs
@@ -126,6 +144,10 @@ project "Engine"
 		"%{IncludeDir.WinPixRuntime}/include",
 		"%{IncludeDir.Compressonator}",
 		"%{IncludeDir.Streamline}",
+		"%{IncludeDir.Rtxdi}",
+		"%{IncludeDir.Nrd}",
+		"%{IncludeDir.MathLib}",
+		"%{IncludeDir.ShaderMake}",
 	}
 
 	libdirs
@@ -161,6 +183,30 @@ project "Engine"
 		"YAML_CPP_STATIC_DEFINE",
 		"PX_PHYSX_STATIC_LIB"
 	}
+
+	filter "files:vendor/rtxdi/**.cpp"
+		flags { "NoPCH" }
+
+	filter "files:vendor/nrd/**.cpp"
+		flags { "NoPCH" }
+		defines
+		{
+			"NRD_EMBEDS_DXBC_SHADERS=0",
+			"NRD_EMBEDS_DXIL_SHADERS=0",
+			"NRD_EMBEDS_SPIRV_SHADERS=0",
+			"NRD_SUPPORTS_VIEWPORT_OFFSET=0",
+			"NRD_SUPPORTS_CHECKERBOARD=1",
+			"NRD_SUPPORTS_HISTORY_CONFIDENCE=1",
+			"NRD_SUPPORTS_DISOCCLUSION_THRESHOLD_MIX=1",
+			"NRD_SUPPORTS_ANTIFIREFLY=1",
+			"REBLUR_PERFORMANCE_MODE=0",
+			"SPIRV_SREG_OFFSET=0",
+			"SPIRV_BREG_OFFSET=2",
+			"SPIRV_UREG_OFFSET=3",
+			"SPIRV_TREG_OFFSET=20",
+			"NOMINMAX",
+			"_CRT_SECURE_NO_WARNINGS"
+		}
 
 	filter "system:windows"
 		systemversion "latest"

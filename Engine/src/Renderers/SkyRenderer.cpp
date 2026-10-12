@@ -6,7 +6,7 @@
 #include "Utils/Math.h"
 #include "Core/Variables.h"
 
-SkyRenderer::SkyRenderer(): RendererBase()
+SkyRenderer::SkyRenderer()
 {
 	auto model = AssetManager::getModelAsset("assets/models/primitives/cube.glb");
 	mesh = model->getRootNode()->primitives[0].mesh;
@@ -52,16 +52,15 @@ void SkyRenderer::addProceduralPasses(FrameGraph &fg, const eastl::vector<LightG
 	{
 		auto sky = resources.getTexture(GFXRID(Sky));
 
-		auto &p = gGlobalPipeline;
 
 		for (int face = 0; face < 6; face++)
 		{
 			cmd_list->setRenderTargets({sky}, nullptr, face, 0, true);
 
-			p->setupGraphicsPipeline(cmd_list, vertex_procedural_shader, fragment_procedural_shader,
+			gGlobalPipeline->setupGraphicsPipeline(cmd_list, vertex_procedural_shader, fragment_procedural_shader,
 									 Engine::Vertex::GetVertexInputsDescription(),
 									 false, false, CULL_MODE_NONE);
-			p->flushAndBind(cmd_list);
+			gGlobalPipeline->flushAndBind(cmd_list);
 
 			procedural_uniforms.mvp = glm::perspectiveLH(glm::radians(90.0f), 1.0f, 0.01f, 512.0f) * Math::getCubeFaceTransform(face) * glm::eulerAngleXYZ(0.0f, glm::radians(180.0f), 0.0f);
 			gDynamicRHI->setConstantBufferData(0, &procedural_uniforms, sizeof(procedural_uniforms));
@@ -90,7 +89,6 @@ void SkyRenderer::addCompositePasses(FrameGraph &fg)
 	{
 		// Render
 		auto composite = resources.getTexture(GFXRID(FinalNoPostTexture));
-		auto sky = resources.getTexture(GFXRID(Sky));
 		auto depth = resources.getTexture(GFXRID(GBufferDepth));
 
 		cmd_list->setRenderTargets({composite}, depth, 0, 0, false);

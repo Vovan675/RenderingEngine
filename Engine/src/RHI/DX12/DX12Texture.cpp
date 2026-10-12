@@ -142,14 +142,19 @@ void DX12Texture::fill(const void *sourceData)
 	resource->resource->SetName(L"FILLED TEXTURE");
 }
 
-void DX12Texture::clear(const glm::vec4 &color)
+void DX12Texture::clear(RHICommandList *cmd_list, const glm::vec4 &color)
 {
 	DX12DynamicRHI *native_rhi = (DX12DynamicRHI *)rhi;
-	DX12CommandList *native_cmd_list = (DX12CommandList *)gDynamicRHI->getCmdList();
+	DX12CommandList *native_cmd_list = (DX12CommandList *)cmd_list;
 
 	const float values[4] = { color.x, color.y, color.z, color.w };
 
-	if (isRenderTargetTexture() && !isUAV())
+	if (isDepthTexture())
+	{
+		transitLayout(native_cmd_list, TEXTURE_LAYOUT_ATTACHMENT);
+		DX12TextureView *view = (DX12TextureView *)getRenderTargetView();
+		native_cmd_list->cmd_list->ClearDepthStencilView(view->getDescriptor().getCpuHandle(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, color.x, 0, 0, nullptr);
+	} else if (isRenderTargetTexture() && !isUAV())
 	{
 		transitLayout(native_cmd_list, TEXTURE_LAYOUT_ATTACHMENT);
 		DX12TextureView *view = (DX12TextureView *)getRenderTargetView();

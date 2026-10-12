@@ -8,7 +8,7 @@ struct VS_OUTPUT
 VS_OUTPUT shadowOutput(float3 local_position, float4x4 world_transform)
 {
 	VS_OUTPUT output;
-	output.outPos = mul(pass_view_projection, mul(world_transform, float4(local_position, 1.0)));
+	output.outPos = mul(cull_views[view_id].view_projection, mul(world_transform, float4(local_position, 1.0)));
 	return output;
 }
 

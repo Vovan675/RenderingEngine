@@ -4,39 +4,24 @@
 
 cbuffer Uniforms : register(b0)
 {
-	uint frustums_buffer_id;
-	uint frustums_count;
+	uint cull_views_buffer_id;
+	uint cull_views_count;
 	uint instances_count;
 	uint instances_pass_mask_buffer_id;
 };
 
-struct FrustumData
-{
-	float4x4 view_projection;
-	uint pass_mask;
-	bool is_ortho;
-	bool near_clip;
-	uint pad;
-};
-
-static StructuredBuffer<FrustumData> frustums_buffer = ResourceDescriptorHeap[frustums_buffer_id];
+static StructuredBuffer<CullView> cull_views = ResourceDescriptorHeap[cull_views_buffer_id];
 static RWByteAddressBuffer pass_mask_buffer = ResourceDescriptorHeap[instances_pass_mask_buffer_id];
 
 uint Cull(float3 bound_center, float3 bound_extent)
 {
 	uint pass_mask = 0;
-	for (int i = 0; i < frustums_count; i++)
+	for (int i = 0; i < cull_views_count; i++)
 	{
-		FrustumData frustum = frustums_buffer[i];
-
-		FrustumCullData cull_data;
-		if(frustum.is_ortho)
-			cull_data = getFrustumCullDataOrtho(bound_center, bound_extent, frustum.view_projection, frustum.near_clip);
-		else
-			cull_data = getFrustumCullData(bound_center, bound_extent, frustum.view_projection);
-
+		CullView cull_view = cull_views[i];
+		FrustumCullData cull_data = getFrustumCullData(bound_center, bound_extent, cull_view);
 		if (cull_data.is_visible)
-			pass_mask |= frustum.pass_mask;
+			pass_mask |= cull_view.pass_mask;
 	}
 	return pass_mask;
 }

@@ -90,7 +90,7 @@ struct FieldInfo
 
 	const AssetTypeInfo *getAssetType() const { return registeredAssetType ? *registeredAssetType : nullptr; }
 	bool hasRange() const { return minValue != maxValue; }
-	bool isEditable(const void *owner) const { return !isReadOnly && (!editCondition || editCondition(owner)); }
+	bool isActive(const void *owner) const { return !editCondition || editCondition(owner); }
 	bool isCategory() const { return !valueInfo && !structInfo && !arrayInfo; }
 	bool isDefault(const void *value, const void *default_value) const;
 };

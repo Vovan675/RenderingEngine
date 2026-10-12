@@ -10,6 +10,7 @@ cbuffer Constants : register(b3)
 {
 	uint output_buffer_id;
 	uint environment_tex_id;
+	uint probes_to_update_buffer_id;
 };
 
 struct RayPayload {
@@ -45,10 +46,9 @@ void RayGen()
 {
 	uint ray_index = DispatchRaysIndex().x;
 
-	StructuredBuffer<DDGIVolume> volumes = ResourceDescriptorHeap[ddgi_volume_buffer_id];
-	DDGIVolume volume = volumes[0];
+	DDGIVolume volume = ddgi_volume;
 
-	StructuredBuffer<uint> probes_to_update = ResourceDescriptorHeap[volume.probes_to_update_buffer_ids];
+	StructuredBuffer<uint> probes_to_update = ResourceDescriptorHeap[probes_to_update_buffer_id];
 	uint probe_id = probes_to_update[DispatchRaysIndex().y];
 
 	uint cascade_id = GetProbeCascade(volume, probe_id);

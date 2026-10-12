@@ -1,5 +1,4 @@
 #pragma once
-#include "TransientResources.h"
 #include "RHI/RHITexture.h"
 #include "Rendering/Renderer.h"
 #include "RHI/BindlessResources.h"
@@ -45,7 +44,7 @@ namespace eastl
 }
 
 #define GFXRID(name) GraphicsResourceName(#name, crc::crc32(#name))
-#define GFXRID_ID(name, id) GraphicsResourceName(#name, crc::crc32(#name) + id)
+#define GFXRID_ID(name, id) GraphicsResourceName(#name, crc::crc32(#name) + (id))
 
 class RenderPassNode;
 
@@ -65,7 +64,7 @@ struct FrameGraphResource
 
 struct FrameGraphTexture : public FrameGraphResource<FrameGraphResourceType::TEXTURE>
 {
-	RHITexture *resource = nullptr;
+	RHITextureRef resource;
 	TextureDescription desc;
 
 	// From description (transient resource)
@@ -86,44 +85,19 @@ struct FrameGraphTexture : public FrameGraphResource<FrameGraphResourceType::TEX
 
 	FrameGraphTexture(FrameGraphTexture &&) noexcept = default;
 
-	void create()
+	void transition(RHICommandList *cmd_list, ResourceState usage)
 	{
-		resource = TransientResources::getTemporaryTexture(desc);
-
-		if (!resource->isValid())
-			resource->fill();
-		resource->setDebugName(name);
-	}
-
-	void destroy()
-	{
-		TransientResources::releaseTemporaryTexture(resource);
-		resource = nullptr;
-	}
-
-	void preRead(RHICommandList *cmd_list, ResourceState flags)
-	{
-		TextureLayoutType new_layout;
-		if (hasAnyFlags(flags, ResourceState::UAV))
-			new_layout = TEXTURE_LAYOUT_GENERAL;
-		else if (hasAnyFlags(flags, ResourceState::COPY_SRC))
-			new_layout = TEXTURE_LAYOUT_TRANSFER_SRC;
-		else if (hasAnyFlags(flags, ResourceState::DEPTH_READ))
-			new_layout = TEXTURE_LAYOUT_DEPTH_READ;
-		else
-			new_layout = TEXTURE_LAYOUT_SHADER_READ;
-		resource->transitLayout(cmd_list, new_layout);
-	}
-
-	void preWrite(RHICommandList *cmd_list, ResourceState flags)
-	{
-		TextureLayoutType new_layout;
-		if (hasAnyFlags(flags, ResourceState::UAV))
-			new_layout = TEXTURE_LAYOUT_GENERAL;
-		else if (hasAnyFlags(flags, ResourceState::COPY_DST))
-			new_layout = TEXTURE_LAYOUT_TRANSFER_DST;
-		else
+		TextureLayoutType new_layout = TEXTURE_LAYOUT_SHADER_READ;
+		if (usage == ResourceState::UAV)
+			new_layout = TEXTURE_LAYOUT_UAV;
+		else if (usage == ResourceState::RENDER_TARGET)
 			new_layout = TEXTURE_LAYOUT_ATTACHMENT;
+		else if (usage == ResourceState::DEPTH_READ)
+			new_layout = TEXTURE_LAYOUT_DEPTH_READ;
+		else if (usage == ResourceState::COPY_SRC)
+			new_layout = TEXTURE_LAYOUT_TRANSFER_SRC;
+		else if (usage == ResourceState::COPY_DST)
+			new_layout = TEXTURE_LAYOUT_TRANSFER_DST;
 		resource->transitLayout(cmd_list, new_layout);
 	}
 
@@ -137,7 +111,7 @@ struct FrameGraphTexture : public FrameGraphResource<FrameGraphResourceType::TEX
 
 struct FrameGraphBuffer : public FrameGraphResource<FrameGraphResourceType::BUFFER>
 {
-	RHIBuffer *resource = nullptr;
+	RHIBufferRef resource;
 	BufferDescription desc;
 
 	// From description (transient resource)
@@ -157,28 +131,6 @@ struct FrameGraphBuffer : public FrameGraphResource<FrameGraphResourceType::BUFF
 	}
 
 	FrameGraphBuffer(FrameGraphBuffer &&) noexcept = default;
-
-	void create()
-	{
-		resource = TransientResources::getTemporaryBuffer(desc);
-		resource->setDebugName(name.c_str());
-	}
-
-	void destroy()
-	{
-		TransientResources::releaseTemporaryBuffer(resource);
-		resource = nullptr;
-	}
-
-	void preRead(RHICommandList *cmd_list, ResourceState flags)
-	{
-		resource->transitState(flags);
-	}
-
-	void preWrite(RHICommandList *cmd_list, ResourceState flags)
-	{
-		resource->transitState(flags);
-	}
 
 	eastl::string toString() const
 	{

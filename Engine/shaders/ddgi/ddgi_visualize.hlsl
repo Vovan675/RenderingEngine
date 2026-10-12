@@ -1,8 +1,7 @@
 #include "../common.h"
 #include "ddgi_common.hlsl"
 
-static StructuredBuffer<DDGIVolume> volumes = ResourceDescriptorHeap[ddgi_volume_buffer_id];
-static DDGIVolume volume = volumes[0];
+static DDGIVolume volume = ddgi_volume;
 
 cbuffer Settings : register(b1)
 {
@@ -40,8 +39,8 @@ VertexOutput VSMain(VertexInput IN) {
 }
 
 float4 PSMain(VertexOutput IN) : SV_TARGET {
-	Texture2DArray distance_atlas = ResourceDescriptorHeap[volume.distance_atlas_tex_id];
-	Texture2DArray irradiance_atlas = ResourceDescriptorHeap[volume.irradiance_atlas_tex_id];
+	Texture2DArray distance_atlas = ResourceDescriptorHeap[ddgi_distance_atlas_tex_id];
+	Texture2DArray irradiance_atlas = ResourceDescriptorHeap[ddgi_irradiance_atlas_tex_id];
 	uint3 probe_coords = GetProbeGridCoords(volume, IN.probe_id);
 
 	//#define SHOW_CASCADES

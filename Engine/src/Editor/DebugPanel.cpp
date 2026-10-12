@@ -123,7 +123,6 @@ void DebugPanel::renderImGui(EditorContext &context)
 			if (UI::combo("DDGI Visualize Mode", &mode, items, IM_ARRAYSIZE(items)))
 				render_ddgi_visualize_mode = mode;
 		}
-
 		UI::convar(render_lighting_only.getDescription());
 		UI::convar(render_culling_freeze.getDescription());
 		UI::convar(render_culling_hiz_debug.getDescription());

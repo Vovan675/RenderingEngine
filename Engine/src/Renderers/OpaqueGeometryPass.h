@@ -19,16 +19,14 @@ public:
 
 	struct RenderView
 	{
-		glm::mat4 view_projection;
+		uint32_t view_id = 0;
 		uint32_t pass_mask;
 		uint32_t instance_count;
-		uint32_t view_id = 0;
 		glm::ivec2 render_size;
 		GraphicsResourceName hiz;
+		TextureDescription hiz_description{};
 		uint32_t layer = 0;
 		bool use_two_pass_occlusion = true;
-		bool ortho_frustum = false;
-		bool near_clip = true;
 		bool use_reverse_z = true;
 		bool depth_clip = true;
 		CullMode cull_mode = CULL_MODE_BACK;

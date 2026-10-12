@@ -330,18 +330,13 @@ void EditorApplication::update(float delta_time)
 	}
 }
 
-void EditorApplication::updateBuffers(float delta_time)
-{
-	Renderer::updateDefaultUniforms(delta_time);
-}
-
 
 void EditorApplication::recordCommands(RHICommandList *cmd_list)
 {
 	scene_renderer->setScene(Scene::getCurrentScene());
 	scene_renderer->render(&context.editor_camera, viewport_panel.viewport_texture);
 
-	FrameGraph frameGraph;
+	FrameGraph frameGraph(scene_renderer->persistent_resources, scene_renderer->transient_resources);
 
 	// Render ImGui to backbuffer
 	frameGraph.importTexture(GFXRID(FinalTexture), viewport_panel.viewport_texture);
@@ -352,7 +347,6 @@ void EditorApplication::recordCommands(RHICommandList *cmd_list)
 	{
 		builder.readTexture(GFXRID(FinalTexture));
 		builder.writeTexture(GFXRID(BackbufferTexture));
-		builder.setSideEffect(true);
 	},
 	[=](const RenderPassResources &resources, RHICommandList *cmd_list)
 	{

@@ -122,6 +122,140 @@ REFLECT_BEGIN(FilmSettings)
 		.EDIT_IF(owner.vignette),
 REFLECT_END()
 
+enum RTXDIBiasCorrection
+{
+	BIAS_CORRECTION_OFF = 0,
+	BIAS_CORRECTION_BASIC,
+	BIAS_CORRECTION_PAIRWISE,
+	BIAS_CORRECTION_RAYTRACED,
+};
+inline const char *const rtxdi_bias_correction_items[] = {"Off", "Basic", "Pairwise", "Ray Traced"};
+
+struct RTXDISettings
+{
+	int max_history_length = 20;
+	int spatial_samples = 1;
+	int disocclusion_boost_samples = 8;
+	float sampling_radius = 32.0f;
+	float depth_threshold = 0.1f;
+	float normal_threshold = 0.5f;
+	RTXDIBiasCorrection bias_correction = BIAS_CORRECTION_PAIRWISE;
+	bool material_similarity_test = true;
+	bool visibility_shortcut = false;
+	bool permutation_sampling = false;
+	bool discount_naive_samples = true;
+	bool reuse_final_visibility = false;
+};
+
+REFLECT_BEGIN(RTXDISettings)
+	REFLECT_FIELD(max_history_length).range(1.0f, 64.0f),
+	REFLECT_FIELD(spatial_samples).range(0.0f, 32.0f),
+	REFLECT_FIELD(disocclusion_boost_samples).range(1.0f, 32.0f),
+	REFLECT_FIELD(sampling_radius).range(1.0f, 64.0f).format("%.0f px"),
+	REFLECT_FIELD(depth_threshold).range(0.0f, 1.0f),
+	REFLECT_FIELD(normal_threshold).range(0.0f, 1.0f),
+	REFLECT_FIELD(bias_correction).items(rtxdi_bias_correction_items),
+	REFLECT_FIELD(material_similarity_test),
+	REFLECT_FIELD(visibility_shortcut),
+	REFLECT_FIELD(permutation_sampling),
+	REFLECT_FIELD(discount_naive_samples),
+	REFLECT_FIELD(reuse_final_visibility),
+REFLECT_END()
+
+struct RelaxSettings
+{
+	uint32_t max_accumulated_frames = 20;
+	uint32_t max_fast_accumulated_frames = 4;
+	float diffuse_prepass_blur_radius = 30.0f;
+	float specular_prepass_blur_radius = 50.0f;
+	float min_hit_distance_weight = 0.1f;
+	float diffuse_phi_luminance = 1.0f;
+	float specular_phi_luminance = 1.0f;
+	uint32_t atrous_iterations = 5;
+	float depth_threshold = 0.003f;
+	float lobe_angle_fraction = 0.5f;
+	float roughness_fraction = 0.15f;
+	bool anti_firefly = true;
+};
+
+REFLECT_BEGIN(RelaxSettings)
+	REFLECT_FIELD(max_accumulated_frames).range(1.0f, 64.0f),
+	REFLECT_FIELD(max_fast_accumulated_frames).range(0.0f, 64.0f),
+	REFLECT_FIELD(diffuse_prepass_blur_radius).range(0.0f, 50.0f).format("%.0f px"),
+	REFLECT_FIELD(specular_prepass_blur_radius).range(0.0f, 50.0f).format("%.0f px"),
+	REFLECT_FIELD(min_hit_distance_weight).range(0.0f, 0.2f),
+	REFLECT_FIELD(diffuse_phi_luminance).range(0.0f, 10.0f),
+	REFLECT_FIELD(specular_phi_luminance).range(0.0f, 10.0f),
+	REFLECT_FIELD(atrous_iterations).range(2.0f, 8.0f),
+	REFLECT_FIELD(depth_threshold).range(0.0f, 0.1f).format("%.3f"),
+	REFLECT_FIELD(lobe_angle_fraction).range(0.0f, 1.0f).format("%.2f"),
+	REFLECT_FIELD(roughness_fraction).range(0.0f, 1.0f).format("%.2f"),
+	REFLECT_FIELD(anti_firefly),
+REFLECT_END()
+
+enum ConfidenceVisualize
+{
+	CONFIDENCE_VISUALIZE_OFF = 0,
+	CONFIDENCE_VISUALIZE_DIFFUSE,
+	CONFIDENCE_VISUALIZE_SPECULAR,
+};
+inline const char *const confidence_visualize_items[] = {"Off", "Diffuse", "Specular"};
+
+struct ConfidenceSettings
+{
+	bool enabled = true;
+	float sensitivity = 8.0f;
+	float darkness_bias_ev = -12.0f;
+	float history_length = 0.75f;
+	ConfidenceVisualize visualize = CONFIDENCE_VISUALIZE_OFF;
+};
+
+REFLECT_BEGIN(ConfidenceSettings)
+	REFLECT_FIELD(enabled).label("Enable Confidence"),
+	REFLECT_FIELD(sensitivity).range(1.0f, 20.0f).format("%.1f").EDIT_IF(owner.enabled),
+	REFLECT_FIELD(darkness_bias_ev).label("Darkness Bias").range(-16.0f, -4.0f).format("%.0f EV").EDIT_IF(owner.enabled),
+	REFLECT_FIELD(history_length).range(0.0f, 3.0f).format("%.2f frames").EDIT_IF(owner.enabled),
+	REFLECT_FIELD(visualize).items(confidence_visualize_items).notSerialized().EDIT_IF(owner.enabled),
+REFLECT_END()
+
+
+enum DirectLightingMode
+{
+	DIRECT_LIGHTING_DEFERRED = 0,
+	DIRECT_LIGHTING_RTXDI,
+};
+inline const char *const direct_lighting_mode_items[] = {"Deferred", "RTXDI"};
+
+enum DenoiserMode
+{
+	DENOISER_OFF = 0,
+	DENOISER_RELAX,
+	DENOISER_REFERENCE,
+};
+inline const char *const denoiser_mode_items[] = {"Off", "RELAX", "Reference"};
+
+struct LightingSettings
+{
+	DirectLightingMode direct = DIRECT_LIGHTING_DEFERRED;
+	DenoiserMode denoiser = DENOISER_OFF;
+	bool denoiser_validation = false;
+	float denoiser_split_screen = 0.0f;
+	RTXDISettings rtxdi;
+	RelaxSettings relax;
+	ConfidenceSettings confidence;
+};
+
+REFLECT_BEGIN(LightingSettings)
+	REFLECT_CATEGORY("Lighting"),
+	REFLECT_FIELD(direct).label("Direct Lighting").items(direct_lighting_mode_items).radio(),
+	REFLECT_FIELD(denoiser).items(denoiser_mode_items).EDIT_IF(owner.direct == DIRECT_LIGHTING_RTXDI),
+	REFLECT_FIELD(denoiser_validation).notSerialized().EDIT_IF(owner.direct == DIRECT_LIGHTING_RTXDI && owner.denoiser == DENOISER_RELAX),
+	REFLECT_FIELD(denoiser_split_screen).range(0.0f, 1.0f).format("%.2f").notSerialized().EDIT_IF(owner.direct == DIRECT_LIGHTING_RTXDI && owner.denoiser == DENOISER_RELAX),
+	REFLECT_FIELD(rtxdi).label("RTXDI").EDIT_IF(owner.direct == DIRECT_LIGHTING_RTXDI),
+	REFLECT_FIELD(relax).label("RELAX").EDIT_IF(owner.direct == DIRECT_LIGHTING_RTXDI && owner.denoiser == DENOISER_RELAX),
+	REFLECT_FIELD(confidence).label("History Confidence").EDIT_IF(owner.direct == DIRECT_LIGHTING_RTXDI && owner.denoiser == DENOISER_RELAX),
+REFLECT_END()
+
 struct SSAOSettings
 {
 	bool enabled = true;
@@ -209,6 +343,7 @@ struct RenderSettings
 
 	SkySettings sky;
 	FilmSettings film;
+	LightingSettings lighting;
 	SSAOSettings ssao;
 	ShadowSettings shadows;
 	SSRSettings ssr;
@@ -220,6 +355,7 @@ REFLECT_BEGIN(RenderSettings)
 	REFLECT_FIELD(path_tracing),
 	REFLECT_FIELD(sky),
 	REFLECT_FIELD(film),
+	REFLECT_FIELD(lighting),
 	REFLECT_FIELD(ssao),
 	REFLECT_FIELD(shadows),
 	REFLECT_FIELD(ssr),

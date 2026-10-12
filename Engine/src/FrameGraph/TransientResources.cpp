@@ -1,123 +1,56 @@
 #include "pch.h"
 #include "TransientResources.h"
-#include "Rendering/Renderer.h"
 
-eastl::unordered_map<size_t, eastl::vector<TransientResources::ResourceEntry>> TransientResources::textures;
-eastl::unordered_map<size_t, eastl::vector<TransientResources::ResourceEntry>> TransientResources::buffers;
-
-void TransientResources::init()
-{}
-
-void TransientResources::cleanup()
+void TransientResources::deleteUnused()
 {
-	textures.clear();
-	buffers.clear();
+	for (auto &[hash, free_textures] : textures)
+		eastl::erase_if(free_textures, [](const TransientTexture &transient) { return transient.last_frame + 1 != gDynamicRHI->getFrame(); });
+	for (auto &[hash, free_buffers] : buffers)
+		eastl::erase_if(free_buffers, [](const TransientBuffer &transient) { return transient.last_frame + 1 != gDynamicRHI->getFrame(); });
 }
 
-void TransientResources::update()
+RHITextureRef TransientResources::getTexture(const TextureDescription &desc)
 {
-	for (auto it = textures.begin(); it != textures.end(); it++)
+	eastl::vector<TransientTexture> &free_textures = textures[desc.getHash()];
+
+	// Create new if no free textures
+	if (free_textures.empty())
 	{
-		for (auto resource_it = it->second.begin(); resource_it != it->second.end(); resource_it++)
-		{
-			if (gDynamicRHI->getFrame() - resource_it->last_access_frame > 10)
-			{
-				resource_it = it->second.erase(resource_it);
-				if (resource_it >= it->second.end())
-					break;
-				if (it->second.empty())
-					break;
-			}
-		}
-	}
-}
-
-RHITexture *TransientResources::getTemporaryTexture(const TextureDescription &desc)
-{
-	size_t hash = desc.getHash();
-
-	RHITexture *temporary_texture = nullptr;
-
-	// Try to find unused temporary texture
-	if (textures.find(hash) != textures.end())
-	{
-		for (auto &entry : textures[hash])
-		{
-			if (!entry.is_used)
-			{
-				entry.last_access_frame = gDynamicRHI->getFrame();
-				entry.is_used = true;
-				temporary_texture = entry.texture;
-				break;
-			}
-		}
-	}
-
-	// Create new texture if not exists
-	if (!temporary_texture)
-	{
-		auto texture = gDynamicRHI->createTexture(desc);
-		textures[hash].emplace_back(texture, gDynamicRHI->getFrame(), true);
+		RHITextureRef texture = gDynamicRHI->createTexture(desc);
+		texture->fill();
 		return texture;
 	}
 
-	return temporary_texture;
+	// Return last free texture
+	RHITextureRef texture = free_textures.back().texture;
+	free_textures.pop_back();
+	return texture;
 }
 
-void TransientResources::releaseTemporaryTexture(RHITexture *texture)
+void TransientResources::releaseTexture(RHITextureRef texture)
 {
-	size_t hash = texture->getDescription().getHash();
-	for (auto &entry : textures[hash])
-	{
-		if (entry.texture == texture)
-		{
-			entry.last_access_frame = gDynamicRHI->getFrame();
-			entry.is_used = false;
-		}
-	}
+	TransientTexture &transient = textures[texture->getDescription().getHash()].push_back();
+	transient.texture = texture;
+	transient.last_frame = gDynamicRHI->getFrame();
 }
 
-RHIBuffer *TransientResources::getTemporaryBuffer(const BufferDescription &desc)
+RHIBufferRef TransientResources::getBuffer(const BufferDescription &desc)
 {
-	size_t hash = desc.getHash();
+	eastl::vector<TransientBuffer> &free_buffers = buffers[desc.getHash()];
 
-	RHIBuffer *temporary_buffer = nullptr;
+	// Create new if no free buffers
+	if (free_buffers.empty())
+		return gDynamicRHI->createBuffer(desc);
 
-	// Try to find unused temporary buffer
-	if (buffers.find(hash) != buffers.end())
-	{
-		for (auto &entry : buffers[hash])
-		{
-			if (!entry.is_used)
-			{
-				entry.last_access_frame = gDynamicRHI->getFrame();
-				entry.is_used = true;
-				temporary_buffer = entry.buffer;
-				break;
-			}
-		}
-	}
-
-	// Create new buffer if not exists
-	if (!temporary_buffer)
-	{
-		auto buffer = gDynamicRHI->createBuffer(desc);
-		buffers[hash].emplace_back(buffer, gDynamicRHI->getFrame(), true);
-		return buffer;
-	}
-
-	return temporary_buffer;
+	// Return last free buffer
+	RHIBufferRef buffer = free_buffers.back().buffer;
+	free_buffers.pop_back();
+	return buffer;
 }
 
-void TransientResources::releaseTemporaryBuffer(RHIBuffer *buffer)
+void TransientResources::releaseBuffer(RHIBufferRef buffer)
 {
-	size_t hash = buffer->getDescription().getHash();
-	for (auto &entry : buffers[hash])
-	{
-		if (entry.buffer == buffer)
-		{
-			entry.last_access_frame = gDynamicRHI->getFrame();
-			entry.is_used = false;
-		}
-	}
+	TransientBuffer &transient = buffers[buffer->getDescription().getHash()].push_back();
+	transient.buffer = buffer;
+	transient.last_frame = gDynamicRHI->getFrame();
 }

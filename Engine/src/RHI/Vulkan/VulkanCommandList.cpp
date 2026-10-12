@@ -4,6 +4,7 @@
 #include "VulkanUtils.h"
 #include "RHI/RHIBuffer.h"
 #include "RHI/RHITexture.h"
+#include "VulkanTexture.h"
 #include "RHI/RHIPipeline.h"
 #include "Utils/Math.h"
 
@@ -110,7 +111,7 @@ void VulkanCommandList::setPipeline(RHIPipeline *pipeline)
 void VulkanCommandList::setVertexBuffer(RHIBuffer *buffer, uint32_t offset, uint32_t stride, uint32_t slot)
 {
 	VulkanBuffer *native_buffer = static_cast<VulkanBuffer *>(buffer);
-	native_buffer->transitState(ResourceState::VERTEX_BUFFER);
+	native_buffer->transitState(this, ResourceState::VERTEX_BUFFER);
 	VkBuffer buffers[] = {native_buffer->getBuffer()};
 	VkDeviceSize offsets[] = {offset};
 	VkDeviceSize sizes[] = {buffer->getSize() - offset};
@@ -121,7 +122,7 @@ void VulkanCommandList::setVertexBuffer(RHIBuffer *buffer, uint32_t offset, uint
 void VulkanCommandList::setIndexBuffer(RHIBuffer *buffer, uint32_t offset, IndexFormat format)
 {
 	VulkanBuffer *native_buffer = static_cast<VulkanBuffer *>(buffer);
-	native_buffer->transitState(ResourceState::INDEX_BUFFER);
+	native_buffer->transitState(this, ResourceState::INDEX_BUFFER);
 	VkIndexType index_type = VK_INDEX_TYPE_UINT32;
 	switch (format)
 	{
@@ -231,7 +232,7 @@ void VulkanCommandList::dispatchMeshIndirect(RHIBuffer *args_buffer, uint32_t dr
 void VulkanCommandList::fillBuffer(RHIBuffer *buffer, uint32_t value)
 {
 	VulkanBuffer *native_buffer = static_cast<VulkanBuffer *>(buffer);
-	native_buffer->transitState(ResourceState::COPY_DST);
+	native_buffer->transitState(this, ResourceState::COPY_DST);
 	vkCmdFillBuffer(cmd_buffer, native_buffer->getBuffer(), 0, VK_WHOLE_SIZE, value);
 }
 
@@ -240,14 +241,35 @@ void VulkanCommandList::copyBuffer(RHIBuffer *src, RHIBuffer *dest, uint64_t src
 	VulkanBuffer *native_src_buffer = (VulkanBuffer *)src;
 	VulkanBuffer *native_dst_buffer = (VulkanBuffer *)dest;
 
-	native_src_buffer->transitState(ResourceState::COPY_SRC);
-	native_dst_buffer->transitState(ResourceState::COPY_DST);
+	native_src_buffer->transitState(this, ResourceState::COPY_SRC);
+	native_dst_buffer->transitState(this, ResourceState::COPY_DST);
 
 	VkBufferCopy copyRegion{};
 	copyRegion.srcOffset = src_offset;
 	copyRegion.dstOffset = dest_offset;
 	copyRegion.size = size;
 	vkCmdCopyBuffer(cmd_buffer, native_src_buffer->getBuffer(), native_dst_buffer->getBuffer(), 1, &copyRegion);
+}
+
+void VulkanCommandList::copyTexture(RHITexture *src, RHITexture *dest)
+{
+	VulkanTexture *native_src_texture = (VulkanTexture *)src;
+	VulkanTexture *native_dst_texture = (VulkanTexture *)dest;
+
+	native_src_texture->transitLayout(this, TEXTURE_LAYOUT_TRANSFER_SRC);
+	native_dst_texture->transitLayout(this, TEXTURE_LAYOUT_TRANSFER_DST);
+
+	VkImageCopy region{};
+	region.srcSubresource.aspectMask = src->isDepthTexture() ? VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
+	region.srcSubresource.layerCount = src->getArrayLevels();
+	region.dstSubresource = region.srcSubresource;
+	for (int mip = 0; mip < src->getMipLevels(); mip++)
+	{
+		region.srcSubresource.mipLevel = mip;
+		region.dstSubresource.mipLevel = mip;
+		region.extent = {src->getWidth(mip), src->getHeight(mip), 1};
+		vkCmdCopyImage(cmd_buffer, native_src_texture->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, native_dst_texture->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+	}
 }
 
 

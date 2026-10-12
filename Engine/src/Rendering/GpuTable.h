@@ -12,9 +12,9 @@ template<typename T>
 class GpuTable
 {
 public:
-	void init(const char *debug_name, uint32_t capacity, ReplicationPolicy policy)
+	void init(GraphicsResourceName name, uint32_t capacity, ReplicationPolicy policy)
 	{
-		this->debug_name = debug_name;
+		this->name = name;
 		this->policy = policy;
 		ensure_capacity(capacity);
 	}
@@ -128,15 +128,19 @@ public:
 		dirty_count = 0;
 		full_upload_needed = false;
 
-		gpu_buffer->transitState(ResourceState::SHADER_RESOURCE);
+		gpu_buffer->transitState(cmd_list, ResourceState::SHADER_RESOURCE);
 	}
 
 	void upload(FrameGraph &frame_graph)
 	{
-		frame_graph.addCallbackPass(eastl::string("GpuTable Upload: ") + debug_name,
-		[](RenderPassBuilder &builder)
+		frame_graph.importBuffer(name, gpu_buffer);
+		if (policy == ReplicationPolicy::DirtyRows && !full_upload_needed && dirty_count == 0)
+			return;
+
+		frame_graph.addCallbackPass(eastl::string("GpuTable Upload: ") + name.name,
+		[this](RenderPassBuilder &builder)
 		{
-			builder.setSideEffect(true);
+			builder.writeCopyBuffer(name);
 		},
 		[this](const RenderPassResources &resources, RHICommandList *cmd_list)
 		{
@@ -246,11 +250,11 @@ private:
 		desc.use_staging_buffer = true;
 		desc.storage_stride = sizeof(T);
 		gpu_buffer = gDynamicRHI->createBuffer(desc);
-		gpu_buffer->setDebugName(debug_name);
+		gpu_buffer->setDebugName(name.name);
 		full_upload_needed = true;
 	}
 
-	const char *debug_name = nullptr;
+	GraphicsResourceName name;
 	ReplicationPolicy policy = ReplicationPolicy::Copy;
 
 	eastl::vector<T> mirror;

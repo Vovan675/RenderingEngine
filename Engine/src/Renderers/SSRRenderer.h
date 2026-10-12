@@ -1,11 +1,11 @@
 #pragma once
-#include "RendererBase.h"
+#include "Rendering/GlobalPipeline.h"
 #include "Rendering/Mesh.h"
 #include "Utils/Camera.h"
 #include "FrameGraph/FrameGraphData.h"
 #include "FrameGraph/FrameGraphRHIResources.h"
 
-class SSRRenderer: public RendererBase
+class SSRRenderer
 {
 public:
 	struct UBO

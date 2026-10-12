@@ -1,10 +1,10 @@
 #pragma once
-#include "RendererBase.h"
+#include "Rendering/GlobalPipeline.h"
 #include "Rendering/Mesh.h"
 #include "FrameGraph/FrameGraphData.h"
 #include "FrameGraph/FrameGraphRHIResources.h"
 
-class DefferedLightingRenderer: public RendererBase
+class DefferedLightingRenderer
 {
 public:
 	struct Constants
@@ -18,7 +18,6 @@ public:
 	} constants;
 
 	DefferedLightingRenderer();
-	virtual ~DefferedLightingRenderer();
 
 	void renderLights(FrameGraph &fg, uint32_t lights_count);
 

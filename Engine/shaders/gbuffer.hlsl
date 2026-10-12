@@ -39,7 +39,7 @@ PixelInput transformVertex(RawVertexData raw_vertex, Instance instance, uint att
 	output.position = mul(view_projection, world_pos);
 
 	float4 old_world_pos = mul(instance.old_world_transform, float4(raw_vertex.position, 1.0));
-	output.old_clip_position = mul(old_view_projection, old_world_pos);
+	output.old_clip_position = mul(old_view_projection_unjittered, old_world_pos);
 
 	float3x3 rotation = getRotationMatrix(instance.world_transform);
 	output.world_normal = normalize(mul(rotation, raw_vertex.normal));

@@ -6,10 +6,14 @@
 #include "RenderPassResources.h"
 #include "RenderPassBuilder.h"
 
+class PersistentResources;
+class TransientResources;
+
 class FrameGraph
 {
 public:
-	FrameGraph()
+	FrameGraph(PersistentResources &persistent_resources, TransientResources &transient_resources)
+		: persistent_resources(persistent_resources), transient_resources(transient_resources)
 	{
 		all_textures.reserve(128);
 		all_buffers.reserve(64);
@@ -87,6 +91,9 @@ private:
 		return resource_id;
 	}
 
+	bool createPersistentTexture(GraphicsResourceName name, const TextureDescription &desc);
+	bool createPersistentBuffer(GraphicsResourceName name, const BufferDescription &desc);
+
 	TextureDescription getTextureDescription(GraphicsResourceName name)
 	{
 		FrameGraphTextureId resource_id = texture_name_to_id[name];
@@ -112,6 +119,12 @@ private:
 	eastl::vector<RenderPassNode> renderpass_nodes;
 
 	FrameGraphBlackboard blackboard;
+
+	PersistentResources &persistent_resources;
+	eastl::vector<GraphicsResourceName> persistent_texture_names;
+	eastl::vector<GraphicsResourceName> persistent_buffer_names;
+
+	TransientResources &transient_resources;
 };
 
 

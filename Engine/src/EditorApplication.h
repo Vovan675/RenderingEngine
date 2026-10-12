@@ -7,7 +7,6 @@
 #include "renderers/IrradianceRenderer.h"
 #include "renderers/PrefilterRenderer.h"
 #include "renderers/SkyRenderer.h"
-#include "renderers/MeshRenderer.h"
 #include "imgui/ImGuiWrapper.h"
 #include "renderers/GBufferPass.h"
 #include "renderers/DefferedLightingRenderer.h"
@@ -40,7 +39,6 @@ public:
 protected:
 	void init() override;
 	void update(float delta_time) override;
-	void updateBuffers(float delta_time) override;
 	void recordCommands(RHICommandList *cmd_list) override;
 	void cleanupResources() override;
 private:

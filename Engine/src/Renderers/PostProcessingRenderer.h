@@ -1,11 +1,11 @@
 #pragma once
-#include "RendererBase.h"
+#include "Rendering/GlobalPipeline.h"
 #include "Rendering/Mesh.h"
 #include "Utils/Camera.h"
 #include "FrameGraph/FrameGraphData.h"
 #include "FrameGraph/FrameGraphRHIResources.h"
 
-class PostProcessingRenderer: public RendererBase
+class PostProcessingRenderer
 {
 public:
 	struct FilmUBO
@@ -17,9 +17,6 @@ public:
 		float exposure = 0.000013;
 		int tonemapper_mode = 0;
 	} film_ubo;
-
-	PostProcessingRenderer();
-	virtual ~PostProcessingRenderer();
 
 	void addPasses(FrameGraph &fg);
 

@@ -22,41 +22,47 @@ ShadowRenderer::ShadowRenderer()
 		miss_shader = gDynamicRHI->createShader(L"shaders/rt/rt_shader.hlsl", MISS_SHADER);
 
 		closest_hit_shader = gDynamicRHI->createShader(L"shaders/rt/rt_shader.hlsl", CLOSEST_HIT_SHADER);
-		TextureDescription tex_description = {};
-		tex_description.width = gDynamicRHI->getSwapchainTexture(0)->getWidth();
-		tex_description.height = gDynamicRHI->getSwapchainTexture(0)->getHeight();
-		tex_description.format = FORMAT_R8G8B8A8_UNORM;
-		tex_description.usage_flags = TEXTURE_USAGE_TRANSFER_SRC | TEXTURE_USAGE_STORAGE;
-		storage_image = gDynamicRHI->createTexture(tex_description);
-		storage_image->fill();
 	}
 }
 
-void ShadowRenderer::addShadowMapPasses(FrameGraph &fg, uint32_t max_draw_calls_count)
+void ShadowRenderer::addCullViews(GpuTable<CullViewGPU> &cull_views, Camera *camera)
 {
-	OpaqueGeometryPass opaque;
+	shadow_views.clear();
 
-	auto light_entities_id = Scene::getCurrentScene()->getEntitiesWith<LightComponent>();
+	auto components = Scene::getCurrentScene()->getEntitiesWith<TransformComponent, LightComponent>();
 
-	ShadowPasses &shadow_passes = fg.getBlackboard().add<ShadowPasses>();
-
-	uint32_t shadow_view_id = 1; // TODO: in future registrate frustums in separate system and use real view_id (view_id is tied to pass_mask and view_projection)
-
-	for (entt::entity light_entity_id : light_entities_id)
+	for (auto &&[entity, transform, light] : components.each())
 	{
-		Entity light_entity(light_entity_id);
-		auto &light = light_entity.getComponent<LightComponent>();
+		glm::vec3 position = glm::vec3(transform.getWorldTransform()[3]);
 
-		if (light.getType() == LIGHT_TYPE_DIRECTIONAL && Renderer::isRayTracedShadowsEnabled())
-			continue;
+		ShadowViews shadow{};
+		shadow.light_entity = entity;
+		shadow.shadow_map = light.getShadowMap();
+		shadow.type = light.getType();
 
-		glm::vec3 scale, position, skew;
-		glm::vec4 persp;
-		glm::quat rotation;
-		glm::decompose(light_entity.getWorldTransformMatrix(), scale, rotation, position, skew, persp);
-
-		if (light.getType() == LIGHT_TYPE_POINT)
+		if (light.getType() == LIGHT_TYPE_DIRECTIONAL)
 		{
+			glm::vec3 light_dir = transform.getLocalDirection(glm::vec3(0, 0, 1));
+			debug_renderer->addArrow(position, position + light_dir, 0.1);
+			update_cascades(light, light_dir, camera);
+
+			if (Renderer::isRayTracedShadowsEnabled())
+				continue;
+
+			CullViewGPU cascade_views[SHADOW_MAP_CASCADE_COUNT]{};
+			for (int cascade = 0; cascade < SHADOW_MAP_CASCADE_COUNT; cascade++)
+			{
+				cascade_views[cascade].view_projection = light.getCascadeViewProj(cascade);
+				cascade_views[cascade].pass_mask = PASS_MASK_DIRECTIONAL_SHADOW;
+				cascade_views[cascade].is_ortho = true;
+				cascade_views[cascade].near_clip = false;
+			}
+			shadow.first_view_id = cull_views.addArray({cascade_views, SHADOW_MAP_CASCADE_COUNT});
+		} else
+		{
+			//debug_renderer->addSphere(position, POINT_SHADOW_Z_NEAR, 16, glm::vec3(1, 0.4, 0));
+			//debug_renderer->addSphere(position, light.attenuation_radius, 32, glm::vec3(1, 1, 0));
+
 			glm::mat4 faces_transforms[6] = {
 				glm::lookAtLH(position, position + glm::vec3(1, 0, 0), glm::vec3(0, 1, 0)),
 				glm::lookAtLH(position, position + glm::vec3(-1, 0, 0), glm::vec3(0, 1, 0)),
@@ -67,61 +73,72 @@ void ShadowRenderer::addShadowMapPasses(FrameGraph &fg, uint32_t max_draw_calls_
 			};
 			glm::mat4 light_projection = glm::perspectiveLH(glm::radians(90.0f), 1.0f, light.attenuation_radius, POINT_SHADOW_Z_NEAR); // Swapped intentionally, Inverse-Z
 
-			GraphicsResourceName shadow_map_resource = GFXRID_ID(ShadowMap, (uint32_t)light_entity_id);
-			fg.importTexture(shadow_map_resource, light.getShadowMap());
-			shadow_passes.shadow_maps.push_back(shadow_map_resource);
+			CullViewGPU face_views[6]{};
+			for (int face = 0; face < 6; face++)
+			{
+				face_views[face].view_projection = light_projection * faces_transforms[face];
+				face_views[face].pass_mask = PASS_MASK_POINT_SHADOW;
+			}
+			shadow.first_view_id = cull_views.addArray({face_views, 6});
+		}
 
-			OpaqueGeometryPass::ShaderSet shaders = OpaqueGeometryPass::ShaderSet::fromFile(L"shaders/lighting/shadows.hlsl");
+		shadow_views.push_back(shadow);
+	}
+}
 
+void ShadowRenderer::addShadowMapPasses(FrameGraph &fg, uint32_t max_draw_calls_count)
+{
+	OpaqueGeometryPass opaque;
+	OpaqueGeometryPass::ShaderSet shaders = OpaqueGeometryPass::ShaderSet::fromFile(L"shaders/lighting/shadows.hlsl");
+
+	ShadowPasses &shadow_passes = fg.getBlackboard().add<ShadowPasses>();
+
+	for (const ShadowViews &shadow : shadow_views)
+	{
+		GraphicsResourceName shadow_map_resource = GFXRID_ID(ShadowMap, (uint32_t)shadow.light_entity);
+		fg.importTexture(shadow_map_resource, shadow.shadow_map);
+		shadow_passes.shadow_maps.push_back(shadow_map_resource);
+
+		uint32_t shadow_size = shadow.shadow_map->getWidth();
+
+		OpaqueGeometryPass::DepthOutput output;
+		output.depth = shadow_map_resource;
+
+		if (shadow.type == LIGHT_TYPE_POINT)
+		{
 			for (int face = 0; face < 6; face++)
 			{
 				OpaqueGeometryPass::RenderView view;
-				view.view_projection = light_projection * faces_transforms[face];
+				view.view_id = shadow.first_view_id + face;
 				view.pass_mask = PASS_MASK_POINT_SHADOW;
 				view.instance_count = max_draw_calls_count;
-				view.view_id = shadow_view_id++;
-				view.render_size = glm::ivec2(light.getShadowMap()->getWidth());
+				view.render_size = glm::ivec2(shadow_size);
 				view.layer = face;
 				view.use_two_pass_occlusion = false;
 				view.cull_mode = CULL_MODE_FRONT;
 				view.shaders = shaders;
 
-				OpaqueGeometryPass::DepthOutput output;
-				output.depth = shadow_map_resource;
-
 				opaque.renderDepth(fg, view, output);
 			}
 		} else
 		{
-			GraphicsResourceName shadow_map_resource = GFXRID_ID(ShadowMap, (uint32_t)light_entity_id);
-			fg.importTexture(shadow_map_resource, light.getShadowMap());
-			shadow_passes.shadow_maps.push_back(shadow_map_resource);
-
-			uint32_t shadow_size = light.getShadowMap()->getWidth();
-			HiZ::createOrImport(fg, cascade_hiz, GFXRID(CascadeHiZ), glm::ivec2(shadow_size / 4), SHADOW_MAP_CASCADE_COUNT);
-
-			OpaqueGeometryPass::ShaderSet shaders = OpaqueGeometryPass::ShaderSet::fromFile(L"shaders/lighting/shadows.hlsl");
+			TextureDescription hiz_description = HiZ::createDescription(glm::ivec2(shadow_size / 4), SHADOW_MAP_CASCADE_COUNT);
 
 			for (int cascade = 0; cascade < SHADOW_MAP_CASCADE_COUNT; cascade++)
 			{
 				OpaqueGeometryPass::RenderView view;
-				view.view_projection = light.cascades[cascade].viewProjMatrix;
+				view.view_id = shadow.first_view_id + cascade;
 				view.pass_mask = PASS_MASK_DIRECTIONAL_SHADOW;
 				view.instance_count = max_draw_calls_count;
-				view.view_id = shadow_view_id++;
 				view.render_size = glm::ivec2(shadow_size);
-				view.hiz = GFXRID(CascadeHiZ);
+				view.hiz = GFXRID_ID(CascadeHiZ, (uint32_t)shadow.light_entity);
+				view.hiz_description = hiz_description;
 				view.layer = cascade;
 				view.use_two_pass_occlusion = true;
-				view.ortho_frustum = true;
-				view.near_clip = false;
 				view.use_reverse_z = false;
 				view.depth_clip = false;
 				view.cull_mode = CULL_MODE_FRONT;
 				view.shaders = shaders;
-
-				OpaqueGeometryPass::DepthOutput output;
-				output.depth = shadow_map_resource;
 
 				opaque.renderDepth(fg, view, output);
 			}
@@ -163,31 +180,6 @@ void ShadowRenderer::addRayTracedShadowPasses(FrameGraph & fg, Ref<RayTracingSce
 		cmd_list->dispatchRays(Renderer::getRenderResolution().x, Renderer::getRenderResolution().y, 1);
 
 	});
-}
-
-void ShadowRenderer::updateShadows(Camera *camera)
-{
-	auto components = Scene::getCurrentScene()->getEntitiesWith<TransformComponent, LightComponent>();
-
-	for (auto &&[entity, transform, light] : components.each())
-	{
-		if (light.getType() == LIGHT_TYPE_DIRECTIONAL)
-		{
-			glm::vec3 scale, position, skew;
-			glm::vec4 persp;
-			glm::quat rotation;
-			glm::decompose(transform.getWorldTransform(), scale, rotation, position, skew, persp);
-
-			glm::vec3 light_dir = transform.getLocalDirection(glm::vec3(0, 0, 1));
-			debug_renderer->addArrow(position, position + light_dir, 0.1);
-			update_cascades(light, light_dir, camera);
-		} else if (light.getType() == LIGHT_TYPE_POINT)
-		{
-			glm::vec3 position = glm::vec3(transform.getWorldTransform()[3]);
-			debug_renderer->addSphere(position, POINT_SHADOW_Z_NEAR, 16, glm::vec3(1, 0.4, 0));
-			debug_renderer->addSphere(position, light.attenuation_radius, 32, glm::vec3(1, 1, 0));
-		}
-	}
 }
 
 void ShadowRenderer::update_cascades(LightComponent &light, glm::vec3 light_dir, Camera *camera)

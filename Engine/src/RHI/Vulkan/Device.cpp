@@ -161,7 +161,7 @@ void Device::CreateLogicalDevice()
 	features12.bufferDeviceAddress = true;
 	features12.descriptorIndexing = true;
 	features12.descriptorBindingPartiallyBound = true;
-	features12.descriptorBindingVariableDescriptorCount = true;
+	features12.descriptorBindingUpdateUnusedWhilePending = true;
 	features12.descriptorBindingSampledImageUpdateAfterBind = true;
 	features12.descriptorBindingStorageBufferUpdateAfterBind = true;
 	features12.runtimeDescriptorArray = true; // for GL_EXT_nonuniform_qualifier extension

@@ -17,6 +17,7 @@ download_temp
 # Big assets, downloaded using tools/get_assets.py
 Engine/assets/models/bistro
 Engine/assets/models/cerberus
+Engine/assets/models/intel_sponza
 
 # Local only assets 
 Engine/assets/models/skull

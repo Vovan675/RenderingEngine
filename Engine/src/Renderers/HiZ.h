@@ -6,6 +6,6 @@
 class HiZ
 {
 public:
-	static void createOrImport(FrameGraph &fg, RHITextureRef &texture, GraphicsResourceName name, glm::ivec2 size, uint32_t layers = 1);
+	static TextureDescription createDescription(glm::ivec2 size, uint32_t layers = 1);
 	static void build(FrameGraph &fg, GraphicsResourceName hiz, GraphicsResourceName depth, uint32_t layer = 0, bool is_depth_reverse_z = true);
 };

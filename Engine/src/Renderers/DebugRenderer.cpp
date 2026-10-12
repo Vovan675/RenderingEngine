@@ -42,20 +42,55 @@ DebugRenderer::DebugRenderer()
 	lines_draw_args_buffer->setDebugName("Lines GPU Draw Args Buffer");
 }
 
-DebugRenderer::~DebugRenderer()
-{
-}
-
 bool DebugRenderer::isEnabled() const
 {
 	return !GFXOPTIONS(path_tracing);
 }
+
+eastl::vector<DebugRenderer::DebugOverlay> DebugRenderer::overlays;
 
 void DebugRenderer::addPasses(FrameGraph &fg)
 {
 	addVisualizerPass(fg);
 	if (render_debug_rendering)
 		addTextureDebugPass(fg);
+	for (DebugOverlay overlay : overlays)
+		addOverlayPass(fg, overlay);
+	overlays.clear();
+}
+
+void DebugRenderer::addOverlayPass(FrameGraph &fg, DebugOverlay overlay)
+{
+	fg.addCallbackPass("Debug Overlay",
+	[&](RenderPassBuilder &builder)
+	{
+		if (!builder.isTextureCreated(overlay.texture))
+			return;
+		builder.readTexture(overlay.texture);
+		builder.writeTexture(GFXRID(FinalTexture));
+	},
+	[=](const RenderPassResources &resources, RHICommandList *cmd_list)
+	{
+		if (!resources.has(overlay.texture))
+			return;
+
+		cmd_list->setRenderTargets({resources.getTexture(GFXRID(FinalTexture))}, nullptr, -1, 0, false);
+
+		gGlobalPipeline->setupGraphicsPipeline(cmd_list, gDynamicRHI->createShader(L"shaders/quad.hlsl", VERTEX_SHADER),
+		gDynamicRHI->createShader(overlay.shader, FRAGMENT_SHADER), VertexInputsDescription{}, true, false, CULL_MODE_BACK);
+		gGlobalPipeline->setBlendMode(BLEND_SRC_ALPHA, BLEND_ONE_MINUS_SRC_ALPHA, BLEND_OP_ADD, BLEND_ZERO, BLEND_ONE, BLEND_OP_ADD);
+		gGlobalPipeline->flushAndBind(cmd_list);
+
+		struct Constants
+		{
+			uint32_t overlay_tex_id;
+		} constants;
+		constants.overlay_tex_id = resources.getReadTexture(overlay.texture);
+		gDynamicRHI->setConstantBufferData(0, &constants, sizeof(constants));
+
+		cmd_list->drawInstanced(6, 1, 0, 0);
+		cmd_list->resetRenderTargets();
+	});
 }
 
 void DebugRenderer::addBox(glm::vec3 half_extents, glm::mat4 transform, glm::vec3 color)
@@ -302,8 +337,7 @@ void DebugRenderer::addTextureDebugPass(FrameGraph &fg)
 		else
 			ubo.hiz_tex_id = 0;
 
-		auto &p = gGlobalPipeline;
-		p->bindScreenQuadPipeline(cmd_list, gDynamicRHI->createShader(L"shaders/debug_quad.hlsl", FRAGMENT_SHADER));
+		gGlobalPipeline->bindScreenQuadPipeline(cmd_list, gDynamicRHI->createShader(L"shaders/debug_quad.hlsl", FRAGMENT_SHADER));
 
 		// Uniforms
 		gDynamicRHI->setConstantBufferData(0, &ubo, sizeof(PresentUBO));
@@ -324,7 +358,6 @@ void DebugRenderer::addVisualizerPass(FrameGraph & fg)
 	[&](RenderPassBuilder &builder)
 	{
 		builder.writeTexture(GFXRID(FinalTexture));
-		builder.setSideEffect(true);
 	},
 	[=](const RenderPassResources &resources, RHICommandList *cmd_list)
 	{
@@ -332,14 +365,13 @@ void DebugRenderer::addVisualizerPass(FrameGraph & fg)
 
 		cmd_list->setRenderTargets({final}, nullptr, -1, 0, false);
 
-		auto &p = gGlobalPipeline;
 		VertexInputsDescription input_desc;
 		input_desc.inputs.push_back({"POSITION", 0, FORMAT_R32G32B32A32_SFLOAT});
 		input_desc.inputs.push_back({"COLOR", 0, FORMAT_R32G32B32_SFLOAT});
-		p->setupGraphicsPipeline(cmd_list, vertex_shader_lines, fragment_shader_lines,
+		gGlobalPipeline->setupGraphicsPipeline(cmd_list, vertex_shader_lines, fragment_shader_lines,
 								 input_desc, false, false, CULL_MODE_NONE);
-		p->setPrimitiveTopology(TOPOLOGY_LINE_LIST);
-		p->flushAndBind(cmd_list);
+		gGlobalPipeline->setPrimitiveTopology(TOPOLOGY_LINE_LIST);
+		gGlobalPipeline->flushAndBind(cmd_list);
 
 		cmd_list->setVertexBuffer(lines_vertex_buffer, 0, sizeof(LineVertex));
 		cmd_list->drawInstanced(lines_index_count, 1, 0, 0);
@@ -376,7 +408,6 @@ void DebugRenderer::addVisualizerPass(FrameGraph & fg)
 		builder.writeTexture(GFXRID(FinalTexture));
 		builder.readBuffer(GFXRID(DebugLinesBuffer));
 		builder.readIndirectArgsBuffer(GFXRID(DebugLinesDrawArgsBuffer));
-		builder.setSideEffect(true);
 	},
 	[=](const RenderPassResources &resources, RHICommandList *cmd_list)
 	{
@@ -384,11 +415,10 @@ void DebugRenderer::addVisualizerPass(FrameGraph & fg)
 
 		cmd_list->setRenderTargets({final}, nullptr, -1, 0, false);
 
-		auto &p = gGlobalPipeline;
-		p->setupGraphicsPipeline(cmd_list, vertex_shader_gpu_lines, fragment_shader_lines,
+		gGlobalPipeline->setupGraphicsPipeline(cmd_list, vertex_shader_gpu_lines, fragment_shader_lines,
 								 {}, false, false, CULL_MODE_NONE);
-		p->setPrimitiveTopology(TOPOLOGY_LINE_LIST);
-		p->flushAndBind(cmd_list);
+		gGlobalPipeline->setPrimitiveTopology(TOPOLOGY_LINE_LIST);
+		gGlobalPipeline->flushAndBind(cmd_list);
 
 		cmd_list->drawIndirect(lines_draw_args_buffer, 1);
 		cmd_list->resetRenderTargets();

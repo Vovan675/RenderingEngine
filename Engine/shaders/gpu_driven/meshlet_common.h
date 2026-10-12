@@ -12,18 +12,14 @@ struct HizParams
 bool cullMeshletVisibility(
 	Meshlet meshlet,
 	float4x4 world_transform,
-	float4x4 frustum_view_projection,
+	CullView view,
 	HizParams hiz,
 	out FrustumCullData cull)
 {
 	float3 bound_center = meshlet.center.xyz;
 	float3 bound_extent = meshlet.extent.xyz;
 	transformBoundBox(bound_center, bound_extent, world_transform);
-	#if IS_ORTHO_FRUSTUM
-		cull = getFrustumCullDataOrtho(bound_center, bound_extent, frustum_view_projection);
-	#else
-		cull = getFrustumCullData(bound_center, bound_extent, frustum_view_projection);
-	#endif
+	cull = getFrustumCullData(bound_center, bound_extent, view);
 
 	if (!cull.is_visible)
 		return false;

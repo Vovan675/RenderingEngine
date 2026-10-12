@@ -116,7 +116,7 @@ void UploadManager::flush(FrameGraph &fg)
 		fg.addCallbackPass(eastl::string("UploadManager Copy: ") + dst_name.name,
 		[&](RenderPassBuilder &builder)
 		{
-			builder.writeBuffer(dst_name);
+			builder.writeCopyBuffer(dst_name);
 		},
 		[batch = eastl::move(cmds)](const RenderPassResources &resources, RHICommandList *cmd_list)
 		{
@@ -137,7 +137,7 @@ void UploadManager::flush(FrameGraph &fg)
 		fg.addCallbackPass(eastl::string("UploadManager Scatter Fill: ") + dst_name.name,
 		[&](RenderPassBuilder &builder)
 		{
-			builder.writeBuffer(dst_name);
+			builder.writeCopyBuffer(dst_name);
 		},
 		[batch = eastl::move(cmds)](const RenderPassResources &resources, RHICommandList *cmd_list)
 		{

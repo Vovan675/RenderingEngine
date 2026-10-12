@@ -156,9 +156,9 @@ RHIBufferView *DX12Buffer::getUnorderedAccessView(bool force_raw)
 	return unordered_access_view;
 }
 
-void DX12Buffer::transitState(ResourceState new_state)
+void DX12Buffer::transitState(RHICommandList *cmd_list, ResourceState new_state)
 {
-	DX12CommandList *native_cmd_list = (DX12CommandList *)gDynamicRHI->getCmdList();
+	DX12CommandList *native_cmd_list = (DX12CommandList *)cmd_list;
 
 	if (current_state == new_state)
 	{

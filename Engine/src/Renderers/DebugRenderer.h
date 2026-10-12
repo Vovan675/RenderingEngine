@@ -1,5 +1,5 @@
 #pragma once
-#include "RendererBase.h"
+#include "Rendering/GlobalPipeline.h"
 #include "RHI/RHIPipeline.h"
 #include "Rendering/Mesh.h"
 #include "RHI/RHITexture.h"
@@ -7,7 +7,7 @@
 #include "FrameGraph/FrameGraphData.h"
 #include "FrameGraph/FrameGraphRHIResources.h"
 
-class DebugRenderer : public RendererBase
+class DebugRenderer
 {
 public:
 	struct PresentUBO
@@ -32,13 +32,13 @@ public:
 	} ubo;
 
 	DebugRenderer();
-	virtual ~DebugRenderer();
 
 	bool isEnabled() const;
 
 	RHIBufferRef getLinesGpuBuffer() { return lines_gpu_buffer; }
 
 	void addPasses(FrameGraph &fg);
+	static void addDebugOverlay(GraphicsResourceName texture, const wchar_t *shader = L"shaders/debug_overlay.hlsl") { overlays.push_back({texture, shader}); }
 
 	void addLine(glm::vec3 p0, glm::vec3 p1, glm::vec3 color = glm::vec3(0, 0, 0))
 	{
@@ -63,6 +63,13 @@ public:
 	void addArrow(glm::vec3 p0, glm::vec3 p1, float arrow_size);
 private:
 	void addTextureDebugPass(FrameGraph &fg);
+	struct DebugOverlay
+	{
+		GraphicsResourceName texture;
+		const wchar_t *shader;
+	};
+
+	void addOverlayPass(FrameGraph &fg, DebugOverlay overlay);
 	void addVisualizerPass(FrameGraph &fg);
 
 	RHIShaderRef vertex_shader_lines;
@@ -82,5 +89,7 @@ private:
 	RHIBufferRef lines_draw_args_buffer;
 
 	int lines_index_count = 0;
+
+	static eastl::vector<DebugOverlay> overlays;
 };
 

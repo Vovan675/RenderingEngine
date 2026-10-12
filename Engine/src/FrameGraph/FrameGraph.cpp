@@ -1,6 +1,30 @@
 #include "pch.h"
 #include "FrameGraph.h"
+#include "PersistentResources.h"
+#include "TransientResources.h"
 #include "Rendering/Renderer.h"
+
+bool FrameGraph::createPersistentTexture(GraphicsResourceName name, const TextureDescription &desc)
+{
+	if (!texture_name_to_id.contains(name))
+	{
+		FrameGraphTextureId resource_id = createTextureResource(name, desc);
+		all_textures[resource_id.id].is_transient = false;
+		persistent_texture_names.push_back(name);
+	}
+	return persistent_resources.declareTexture(name, desc);
+}
+
+bool FrameGraph::createPersistentBuffer(GraphicsResourceName name, const BufferDescription &desc)
+{
+	if (!buffer_name_to_id.contains(name))
+	{
+		FrameGraphBufferId resource_id = createBufferResource(name, desc);
+		all_buffers[resource_id.id].is_transient = false;
+		persistent_buffer_names.push_back(name);
+	}
+	return persistent_resources.declareBuffer(name, desc);
+}
 
 void FrameGraph::compile()
 {
@@ -40,7 +64,7 @@ void FrameGraph::compile()
 	#ifndef DEBUG
 	for (auto &resource : all_textures)
 	{
-		if (resource.ref_count == 0)
+		if (resource.ref_count == 0 && resource.is_transient)
 			unreferenced_resources.push_back(&resource);
 	}
 	#endif
@@ -95,6 +119,20 @@ void FrameGraph::compile()
 
 void FrameGraph::execute(RHICommandList *cmd_list)
 {
+	// Persistent resources
+	for (GraphicsResourceName name : persistent_texture_names)
+	{
+		FrameGraphTexture &texture = all_textures[texture_name_to_id[name].id];
+		texture.resource = persistent_resources.getTexture(name, texture.desc, cmd_list);
+	}
+
+	for (GraphicsResourceName name : persistent_buffer_names)
+	{
+		FrameGraphBuffer &buffer = all_buffers[buffer_name_to_id[name].id];
+		buffer.resource = persistent_resources.getBuffer(name, buffer.desc, cmd_list);
+	}
+
+	// Per pass work
 	for (const auto &pass : renderpass_nodes)
 	{
 		if (pass.getRefCount() == 0 && !pass.has_side_effect)
@@ -104,31 +142,23 @@ void FrameGraph::execute(RHICommandList *cmd_list)
 		PROFILE_GPU_SCOPE_VAR(cmd_list, pass.getName().c_str());
 
 		for (const auto &id : pass.texture_creates)
-			getFrameGraphTexture(id)->create();
-		for (const auto &id : pass.texture_reads)
 		{
-			ResourceState usage = pass.texture_usage.at(id);
-			getFrameGraphTexture(id)->preRead(cmd_list, usage);
+			FrameGraphTexture *texture = getFrameGraphTexture(id);
+			texture->resource = transient_resources.getTexture(texture->desc);
+			texture->resource->setDebugName(texture->name);
 		}
-		for (const auto &id : pass.texture_writes)
-		{
-			ResourceState usage = pass.texture_usage.at(id);
-			getFrameGraphTexture(id)->preWrite(cmd_list, usage);
-		}
+		for (const auto &[id, usage] : pass.texture_usage)
+			getFrameGraphTexture(id)->transition(cmd_list, usage);
 
 		for (const auto &id : pass.buffer_creates)
-			getFrameGraphBuffer(id)->create();
+		{
+			FrameGraphBuffer *buffer = getFrameGraphBuffer(id);
+			buffer->resource = transient_resources.getBuffer(buffer->desc);
+			buffer->resource->setDebugName(buffer->name.c_str());
+		}
 
-		for (const auto &id : pass.buffer_reads)
-		{
-			ResourceState usage = pass.buffer_usage.at(id);
-			getFrameGraphBuffer(id)->preRead(cmd_list, usage);
-		}
-		for (const auto &id : pass.buffer_writes)
-		{
-			ResourceState usage = pass.buffer_usage.at(id);
-			getFrameGraphBuffer(id)->preWrite(cmd_list, usage);
-		}
+		for (const auto &[id, usage] : pass.buffer_usage)
+			getFrameGraphBuffer(id)->resource->transitState(cmd_list, usage);
 
 		{	
 			RenderPassResources resources(*this, pass);
@@ -138,13 +168,13 @@ void FrameGraph::execute(RHICommandList *cmd_list)
 		for (auto &entry: all_textures)
 		{
 			if (entry.last_consumer == &pass && entry.is_transient)
-				entry.destroy();
+				transient_resources.releaseTexture(eastl::move(entry.resource));
 		}
 
 		for (auto &entry: all_buffers)
 		{
 			if ((entry.last_consumer == &pass) && entry.is_transient)
-				entry.destroy();
+				transient_resources.releaseBuffer(eastl::move(entry.resource));
 		}
 	}
 }

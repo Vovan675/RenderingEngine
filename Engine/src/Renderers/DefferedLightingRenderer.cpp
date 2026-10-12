@@ -10,10 +10,6 @@ DefferedLightingRenderer::DefferedLightingRenderer()
 	icosphere_mesh = model->getRootNode()->children[0]->primitives[0].mesh;
 }
 
-DefferedLightingRenderer::~DefferedLightingRenderer()
-{
-}
-
 void DefferedLightingRenderer::renderLights(FrameGraph &fg, uint32_t lights_count)
 {
 	auto *shadow_passes_data = fg.getBlackboard().tryGet<ShadowPasses>();
@@ -50,15 +46,14 @@ void DefferedLightingRenderer::renderLights(FrameGraph &fg, uint32_t lights_coun
 
 		cmd_list->setRenderTargets({diffuse, specular}, nullptr, -1, 0, true);
 
-		auto &p = gGlobalPipeline;
-		p->setupGraphicsPipeline(cmd_list,
+		gGlobalPipeline->setupGraphicsPipeline(cmd_list,
 								  gDynamicRHI->createShader(L"shaders/lighting/deferred_lighting.hlsl", VERTEX_SHADER, "VSMain"),
 								  gDynamicRHI->createShader(L"shaders/lighting/deferred_lighting.hlsl", FRAGMENT_SHADER, "PSMain"),
 								  Engine::Vertex::GetVertexInputsDescription(),
 								  true, false, CULL_MODE_FRONT);
-		p->setBlendMode(BLEND_ONE, BLEND_ONE, BLEND_OP_ADD,
+		gGlobalPipeline->setBlendMode(BLEND_ONE, BLEND_ONE, BLEND_OP_ADD,
 						BLEND_ONE, BLEND_ONE, BLEND_OP_ADD);
-		p->flushAndBind(cmd_list);
+		gGlobalPipeline->flushAndBind(cmd_list);
 
 		bool has_ray_traced_visibility = Renderer::isRayTracedShadowsEnabled() && resources.has(GFXRID(RayTracedVisibility));
 

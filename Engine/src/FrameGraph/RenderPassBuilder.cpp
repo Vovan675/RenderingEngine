@@ -5,13 +5,23 @@ RenderPassBuilder::RenderPassBuilder(FrameGraph &frameGraph, RenderPassNode &ren
 	: frameGraph(frameGraph), renderpass_node(renderpass_node)
 {}
 
-FrameGraphTextureId RenderPassBuilder::createTexture(GraphicsResourceName name, uint32_t width, uint32_t height, Format format)
+static TextureDescription create_texture_desc(uint32_t width, uint32_t height, Format format)
 {
 	TextureDescription desc;
 	desc.width = width;
 	desc.height = height;
 	desc.format = format;
-	return createTexture(name, desc);
+	return desc;
+}
+
+static BufferDescription create_buffer_desc(size_t stride, size_t count, BufferUsage usage)
+{
+	BufferDescription desc;
+	desc.size = stride * count;
+	desc.usage = usage;
+	desc.use_staging_buffer = true;
+	desc.storage_stride = stride;
+	return desc;
 }
 
 FrameGraphTextureId RenderPassBuilder::createTexture(GraphicsResourceName name, TextureDescription desc)
@@ -21,17 +31,31 @@ FrameGraphTextureId RenderPassBuilder::createTexture(GraphicsResourceName name, 
 	return resource_id;
 }
 
+FrameGraphTextureId RenderPassBuilder::createTexture(GraphicsResourceName name, uint32_t width, uint32_t height, Format format)
+{
+	return createTexture(name, create_texture_desc(width, height, format));
+}
+
 FrameGraphBufferId RenderPassBuilder::createBuffer(GraphicsResourceName name, size_t stride, size_t count, BufferUsage usage)
 {
-	BufferDescription desc;
-	desc.size = stride * count;
-	desc.usage = usage;
-	desc.use_staging_buffer = true;
-	desc.storage_stride = stride;
-
-	FrameGraphBufferId resource_id = frameGraph.createBufferResource(name, desc);
+	FrameGraphBufferId resource_id = frameGraph.createBufferResource(name, create_buffer_desc(stride, count, usage));
 	renderpass_node.buffer_creates.emplace_back(resource_id);
 	return resource_id;
+}
+
+bool RenderPassBuilder::createPersistentTexture(GraphicsResourceName name, TextureDescription desc)
+{
+	return frameGraph.createPersistentTexture(name, desc);
+}
+
+bool RenderPassBuilder::createPersistentTexture(GraphicsResourceName name, uint32_t width, uint32_t height, Format format)
+{
+	return createPersistentTexture(name, create_texture_desc(width, height, format));
+}
+
+bool RenderPassBuilder::createPersistentBuffer(GraphicsResourceName name, size_t stride, size_t count, BufferUsage usage)
+{
+	return frameGraph.createPersistentBuffer(name, create_buffer_desc(stride, count, usage));
 }
 
 FrameGraphTextureId RenderPassBuilder::readTexture(GraphicsResourceName texture)
@@ -45,6 +69,13 @@ FrameGraphTextureId RenderPassBuilder::readDepthTexture(GraphicsResourceName tex
 {
 	auto resource_id = frameGraph.texture_name_to_id[texture];
 	renderpass_node.texture_usage[resource_id] = ResourceState::DEPTH_READ;
+	return renderpass_node.texture_reads.emplace_back(resource_id);
+}
+
+FrameGraphTextureId RenderPassBuilder::readCopyTexture(GraphicsResourceName texture)
+{
+	auto resource_id = frameGraph.texture_name_to_id[texture];
+	renderpass_node.texture_usage[resource_id] = ResourceState::COPY_SRC;
 	return renderpass_node.texture_reads.emplace_back(resource_id);
 }
 
@@ -62,11 +93,23 @@ FrameGraphTextureId RenderPassBuilder::writeUAVTexture(GraphicsResourceName name
 	return declare_texture_write(resource_id, ResourceState::UAV);
 }
 
+FrameGraphTextureId RenderPassBuilder::writeCopyTexture(GraphicsResourceName name)
+{
+	auto resource_id = frameGraph.texture_name_to_id[name];
+	return declare_texture_write(resource_id, ResourceState::COPY_DST);
+}
+
 FrameGraphBufferId RenderPassBuilder::writeBuffer(GraphicsResourceName name)
 {
 	auto resource_id = frameGraph.buffer_name_to_id[name];
 	frameGraph.all_buffers[resource_id.id].desc.usage |= BufferUsage::SHADER_WRITE_BUFFER;
 	return declare_buffer_write(resource_id, ResourceState::UAV);
+}
+
+FrameGraphBufferId RenderPassBuilder::writeCopyBuffer(GraphicsResourceName name)
+{
+	auto resource_id = frameGraph.buffer_name_to_id[name];
+	return declare_buffer_write(resource_id, ResourceState::COPY_DST);
 }
 
 FrameGraphBufferId RenderPassBuilder::readBuffer(GraphicsResourceName name)

@@ -4,14 +4,6 @@
 #include "Rendering/Renderer.h"
 #include "Core/Variables.h"
 
-PostProcessingRenderer::PostProcessingRenderer()
-{
-}
-
-PostProcessingRenderer::~PostProcessingRenderer()
-{
-}
-
 void PostProcessingRenderer::addPasses(FrameGraph &fg)
 {
 	last_output = GFXRID(FinalNoPostTexture);
@@ -57,7 +49,7 @@ void PostProcessingRenderer::addFilmPass(FrameGraph &fg)
 	{
 		if (!builder.isTextureCreated(output))
 		{
-			auto &output_desc = builder.getTextureDescription(last_output);
+			TextureDescription output_desc = builder.getTextureDescription(last_output);
 			builder.createTexture(GFXRID(FilmPassOutput), output_desc.width, output_desc.height, output_desc.format);
 		}
 		builder.writeTexture(output);
@@ -91,7 +83,6 @@ void PostProcessingRenderer::addFilmPass(FrameGraph &fg)
 	});
 
 	last_output = GFXRID(FilmPassOutput);
-	last_output = GraphicsResourceName("FilmPassOutput", crc::crc32("FilmPassOutput"));
 }
 
 void PostProcessingRenderer::addFxaaPass(FrameGraph &fg)

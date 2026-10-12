@@ -1,5 +1,6 @@
 #pragma once
 #include "hash.h"
+#include "bindless.h"
 
 // Workaround for https://github.com/microsoft/DirectXShaderCompiler/issues/7740
 #ifdef VULKAN
@@ -71,37 +72,71 @@ float2x2 get2DRotationMatrix(float aSin, float aCos)
 	);
 }
 
-// Frame Constants
+struct DDGICascade
+{
+	float4 min;
+	float4 spacing;
+};
+
+struct DDGIVolume
+{
+	float3 origin;
+	float pad0;
+	int4 size; // cascade size (xyz), probes in cascade (w)
+	float3 spacing;
+	float pad2;
+	float3 random_vector;
+	float pad3;
+	float random_angle;
+	float use_relocation;
+	float use_classification;
+	uint cascades_count;
+	DDGICascade cascades[5];
+	uint rays_per_probe;
+};
+
 cbuffer FrameConstants : register(b32) {
-	float4x4 view;
-	float4x4 iview;
-	float4x4 projection;
-	float4x4 iprojection;
-	float4x4 view_projection;
-	float4x4 old_view_projection;
-	float4x4 view_projection_unjittered;
-	float4 camera_position;
-	float4 render_resolution; // (width, height, 1/width, 1/height)
-	float4 output_resolution; // (width, height, 1/width, 1/height)
-	float z_near;
-	float z_far;
 	float time;
-	float upscale_factor;
-	float2 jitter;
 	uint frame;
 	float sky_intensity;
 	float camera_exposure;
 	uint lights_buffer_id;
+	uint old_lights_buffer_id;
+	uint light_index_mapping_buffer_id;
 	uint lights_count;
 	uint global_meshlets_geometry_buffer_id;
 	uint global_meshlets_lod_groups_buffer_id;
+	uint global_lod_nodes_buffer_id;
 	uint materials_buffer_id;
 	uint instances_buffer_id;
 	uint meshes_buffer_id;
-	uint global_lod_nodes_buffer_id;
 	uint tlas_id;
-	uint ddgi_volume_buffer_id;
 	uint lines_gpu_buffer_id;
+	DDGIVolume ddgi_volume;
+};
+
+cbuffer PassConstants : register(b33) {
+	float4x4 view;
+	float4x4 iview;
+	float4x4 projection;
+	float4x4 iprojection;
+	float4x4 projection_unjittered;
+	float4x4 view_projection;
+	float4x4 view_projection_unjittered;
+	float4x4 old_view;
+	float4x4 old_iview;
+	float4x4 old_iprojection;
+	float4x4 old_projection_unjittered;
+	float4x4 old_view_projection_unjittered;
+	float4 camera_position;
+	float4 old_camera_position;
+	float4 render_resolution; // (width, height, 1/width, 1/height)
+	float4 output_resolution; // (width, height, 1/width, 1/height)
+	float2 jitter;
+	float2 old_jitter;
+	float z_near;
+	float z_far;
+	float upscale_factor;
 };
 
 struct DrawIndexedIndirect
@@ -476,24 +511,9 @@ void addBoundBox(float3 min, float3 max, float3 color)
 	addLine(float3(min.x, min.y, max.z), float3(min.x, max.y, max.z), color);
 }
 
-// Must match in code
-#ifndef RAY_TRACING_SHADER
-static SamplerState linear_wrap_sampler = SamplerDescriptorHeap[0];
-static SamplerState linear_clamp_sampler = SamplerDescriptorHeap[1];
-static SamplerState point_wrap_sampler = SamplerDescriptorHeap[2];
-static SamplerState point_clamp_sampler = SamplerDescriptorHeap[3];
-static SamplerComparisonState shadow_wrap_sampler = SamplerDescriptorHeap[4];
-static SamplerComparisonState shadow_clamp_sampler = SamplerDescriptorHeap[5];
-#else
-#define linear_wrap_sampler ((SamplerState)SamplerDescriptorHeap[0])
-#define linear_clamp_sampler ((SamplerState)SamplerDescriptorHeap[1])
-#define point_wrap_sampler ((SamplerState)SamplerDescriptorHeap[2])
-#define point_clamp_sampler ((SamplerState)SamplerDescriptorHeap[3])
-#define shadow_wrap_sampler ((SamplerComparisonState)SamplerDescriptorHeap[4])
-#define shadow_clamp_sampler ((SamplerComparisonState)SamplerDescriptorHeap[5])
-#endif
 // Convert viewport coordinates to view space position
-float3 GetVSPosition(float2 uv, float hardware_depth) {
+float3 GetVSPosition(float2 uv, float hardware_depth)
+{
 	uv.y = 1.0f - uv.y;
 	float4 clipPos = float4(uv * 2.0 - 1.0, hardware_depth, 1.0);
 	float4 viewPos = mul(iprojection, clipPos);
@@ -501,12 +521,17 @@ float3 GetVSPosition(float2 uv, float hardware_depth) {
 	return viewPos.xyz;
 }
 
-float3 GetWSPosition(float2 uv, float hardware_depth) {
+float3 GetWSPosition(float2 uv, float hardware_depth, float4x4 view_projection_inverse)
+{
 	uv.y = 1.0f - uv.y;
 	float4 clipPos = float4(uv * 2.0 - 1.0, hardware_depth, 1.0);
-	float4 worldPos = mul(mul(iview, iprojection), clipPos);
+	float4 worldPos = mul(view_projection_inverse, clipPos);
 	worldPos.xyz /= worldPos.w;
 	return worldPos.xyz;
+}
+
+float3 GetWSPosition(float2 uv, float hardware_depth) {
+	return GetWSPosition(uv, hardware_depth, mul(iview, iprojection));
 }
 
 // Convert hardware depth to linear depth

@@ -8,7 +8,7 @@
 #include "FrameGraph/FrameGraphUtils.h"
 
 
-SSAORenderer::SSAORenderer() : RendererBase()
+SSAORenderer::SSAORenderer()
 {
 	TextureDescription desc;
 	desc.width = 4;
@@ -85,8 +85,7 @@ void SSAORenderer::addPasses(FrameGraph &fg)
 
 		cmd_list->setRenderTargets({ssao_raw}, nullptr, -1, 0, true);
 
-		auto &p = gGlobalPipeline;
-		p->bindScreenQuadPipeline(cmd_list, fragment_shader_raw);
+		gGlobalPipeline->bindScreenQuadPipeline(cmd_list, fragment_shader_raw);
 
 		// Uniforms
 		gDynamicRHI->setConstantBufferData(0, &ubo_raw_pass, sizeof(UBO_RAW));
@@ -113,8 +112,7 @@ void SSAORenderer::addPasses(FrameGraph &fg)
 
 		cmd_list->setRenderTargets({ssao_blurred}, nullptr, -1, 0, true);
 
-		auto &p = gGlobalPipeline;
-		p->bindScreenQuadPipeline(cmd_list, fragment_shader_blur);
+		gGlobalPipeline->bindScreenQuadPipeline(cmd_list, fragment_shader_blur);
 
 		// Uniforms
 		ubo_blur_pass.raw_tex_id = resources.getReadTexture(GFXRID(SSAORaw));

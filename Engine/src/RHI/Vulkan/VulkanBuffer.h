@@ -18,7 +18,7 @@ public:
 
 	uint64_t getGPUAddress() const override;
 
-	void transitState(ResourceState new_state) override;
+	void transitState(RHICommandList *cmd_list, ResourceState new_state) override;
 
 	bool isValid() const override { return buffer != nullptr; }
 

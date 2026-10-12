@@ -1,11 +1,11 @@
 #pragma once
 
-#include "RendererBase.h"
+#include "Rendering/GlobalPipeline.h"
 #include "Rendering/Mesh.h"
 #include "Utils/Camera.h"
 #include "FrameGraph/FrameGraph.h"
 
-class LutRenderer: public RendererBase
+class LutRenderer
 {
 public:
 	LutRenderer();

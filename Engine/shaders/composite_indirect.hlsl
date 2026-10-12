@@ -87,10 +87,9 @@ PSOutput PSMain(VSInput input)
 	output.ambient = float4(ibl_diffuse * ssao * ibl_ambient_fallback_scale, 1.0);
 	output.specular = float4(prefilter * (f0 * brdf_lut.x + brdf_lut.y) * specular_ao * ibl_specular_fallback_scale, 1.0);
 
-	if (ddgi_volume_buffer_id > 0)
+	#if DDGI
 	{
-		StructuredBuffer<DDGIVolume> volumes = ResourceDescriptorHeap[ddgi_volume_buffer_id];
-		DDGIVolume volume = volumes[0];
+		DDGIVolume volume = ddgi_volume;
 		float volume_weight = GetVolumeWeight(world_pos, volume);
 		if (volume_weight > 0.0f)
 		{
@@ -137,6 +136,7 @@ PSOutput PSMain(VSInput input)
 			//output.ambient = float4(irradiance, 1.0);
 		}
 	}
+	#endif
 
 	#if SSR
 		float3 ssr = textures[ssr_tex_id].Sample(linear_wrap_sampler, input.uv).rgb;

@@ -3,7 +3,8 @@
 
 cbuffer Uniforms : register(b0)
 {
-	float4x4 frustum_view_projection;
+	uint view_id;
+	uint cull_views_buffer_id;
 
 	uint traversal_queue_buffer_id;
 	uint traversal_ctrl_buffer_id;
@@ -21,6 +22,7 @@ cbuffer Uniforms : register(b0)
 	uint current_pass_mask;
 };
 
+static StructuredBuffer<CullView> cull_views = ResourceDescriptorHeap[cull_views_buffer_id];
 static ByteAddressBuffer lod_nodes_buffer = ResourceDescriptorHeap[global_lod_nodes_buffer_id];
 
 static RWStructuredBuffer<TraversalItem> traversal_queue = ResourceDescriptorHeap[traversal_queue_buffer_id];
@@ -80,11 +82,7 @@ void CSMain(uint3 dispatchID : SV_DispatchThreadID)
 	float3 bound_center = instance.bound_center.xyz;
 	float3 bound_extent = instance.bound_extent.xyz;
 	transformBoundBox(bound_center, bound_extent, instance.world_transform);
-	#if IS_ORTHO_FRUSTUM
-		FrustumCullData cull_data = getFrustumCullDataOrtho(bound_center, bound_extent, frustum_view_projection);
-	#else
-		FrustumCullData cull_data = getFrustumCullData(bound_center, bound_extent, frustum_view_projection);
-	#endif
+	FrustumCullData cull_data = getFrustumCullData(bound_center, bound_extent, cull_views[view_id]);
 
 	if (!cull_data.is_visible)
 		return;

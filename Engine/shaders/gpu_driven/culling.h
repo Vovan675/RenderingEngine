@@ -1,6 +1,15 @@
 #pragma once
 #include "../common.h"
 
+struct CullView
+{
+	float4x4 view_projection;
+	uint pass_mask;
+	bool is_ortho;
+	bool near_clip;
+	uint pad;
+};
+
 struct MeshletCandidate
 {
 	uint instance_id;
@@ -38,12 +47,8 @@ struct FrustumCullData
 	bool is_visible;
 };
 
-FrustumCullData getFrustumCullDataOrtho(float3 bound_center, float3 bound_extent, float4x4 view_projection, bool near_clip = true)
+FrustumCullData getFrustumCullDataOrtho(float3 bound_center, float3 bound_extent, float4x4 view_projection, bool near_clip)
 {
-	#if DISABLE_NEAR_CLIP
-		near_clip = false;
-	#endif
-
 	FrustumCullData data;
 
 	// Transform center to clip space
@@ -134,6 +139,13 @@ FrustumCullData getFrustumCullData(float3 bound_center, float3 bound_extent, flo
 	data.is_visible = data.is_visible && !frustum_culled;
 
 	return data;
+}
+
+FrustumCullData getFrustumCullData(float3 bound_center, float3 bound_extent, CullView view)
+{
+	if (view.is_ortho)
+		return getFrustumCullDataOrtho(bound_center, bound_extent, view.view_projection, view.near_clip);
+	return getFrustumCullData(bound_center, bound_extent, view.view_projection);
 }
 
 // HIZ

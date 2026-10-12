@@ -77,6 +77,7 @@ void VulkanBuffer::fill(const void *sourceData)
 		RHICommandList *copy_cmd_list = gDynamicRHI->getCmdListCopy();
 		copy_cmd_list->open();
 		copy_cmd_list->copyBuffer(staging_buffer, this, 0, 0, buffer_size);
+		transitState(copy_cmd_list, ResourceState::SHADER_RESOURCE);
 		copy_cmd_list->close();
 		gDynamicRHI->getCmdQueueCopy()->execute(copy_cmd_list);
 		gDynamicRHI->getCmdQueueCopy()->waitIdle();
@@ -172,9 +173,9 @@ static VulkanAccessInfo toVulkanAccessInfo(ResourceState state)
 	return info;
 }
 
-void VulkanBuffer::transitState(ResourceState new_state)
+void VulkanBuffer::transitState(RHICommandList *cmd_list, ResourceState new_state)
 {
-	VulkanCommandList *native_cmd_list = (VulkanCommandList *)gDynamicRHI->getCmdList();
+	VulkanCommandList *native_cmd_list = (VulkanCommandList *)cmd_list;
 
 	auto writes = [](ResourceState state) { return hasAnyFlags(state, ResourceState::UAV | ResourceState::COPY_DST); };
 

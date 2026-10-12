@@ -47,14 +47,12 @@ void OpaqueGeometryPass::renderDepth(FrameGraph &fg, const RenderView &view, con
 void OpaqueGeometryPass::render(FrameGraph &fg, const RenderView &view, const RenderTargets &targets)
 {
 	MeshletCullDesc cull;
-	cull.pass_mask = view.pass_mask;
-	cull.view_projection = view.view_projection;
-	cull.instance_count = view.instance_count;
 	cull.view_id = view.view_id;
+	cull.pass_mask = view.pass_mask;
+	cull.instance_count = view.instance_count;
 	cull.hiz = view.hiz;
+	cull.hiz_description = view.hiz_description;
 	cull.hiz_layer = view.layer;
-	cull.is_ortho = view.ortho_frustum;
-	cull.near_clip = view.near_clip;
 	cull.reverse_z = view.use_reverse_z;
 	cull.use_occlusion = view.use_two_pass_occlusion;
 
@@ -95,6 +93,7 @@ void OpaqueGeometryPass::render_meshlets(FrameGraph &fg, const RenderView &view,
 		builder.writeTexture(targets.depth.name);
 		builder.readBuffer(GFXRID_ID(VisibleMeshlets, view.view_id));
 		builder.writeBuffer(GFXRID(GroupResidencyBuffer));
+		builder.readBuffer(GFXRID(CullViews));
 
 		if (render_meshlets_mesh_shaders)
 			builder.readIndirectArgsBuffer(GFXRID_ID(DispatchMeshIndirectArgs, view.view_id));
@@ -135,11 +134,13 @@ void OpaqueGeometryPass::render_meshlets(FrameGraph &fg, const RenderView &view,
 
 		struct
 		{
-			glm::mat4 view_projection;
+			uint32_t view_id;
+			uint32_t cull_views_buffer_id;
 			uint32_t visible_meshlets_buffer_id;
 			uint32_t group_residency_buffer_id;
 		} constants;
-		constants.view_projection = view.view_projection;
+		constants.view_id = view.view_id;
+		constants.cull_views_buffer_id = resources.getReadBuffer(GFXRID(CullViews));
 		constants.visible_meshlets_buffer_id = resources.getReadBuffer(GFXRID_ID(VisibleMeshlets, view.view_id));
 		constants.group_residency_buffer_id = resources.getReadWriteBuffer(GFXRID(GroupResidencyBuffer));
 		gDynamicRHI->setConstantBufferData(0, &constants, sizeof(constants));
@@ -166,6 +167,7 @@ void OpaqueGeometryPass::cull_traditional(FrameGraph &fg, const RenderView &view
 		builder.writeBuffer(GFXRID_ID(TraditionalDrawCount, view.view_id));
 		builder.writeBuffer(GFXRID_ID(TraditionalDrawInstances, view.view_id));
 		builder.readBuffer(GFXRID(InstancesPassMask));
+		builder.readBuffer(GFXRID(CullViews));
 	},
 	[view](const RenderPassResources &resources, RHICommandList *cmd_list)
 	{
@@ -173,15 +175,14 @@ void OpaqueGeometryPass::cull_traditional(FrameGraph &fg, const RenderView &view
 
 		gGlobalPipeline->setupComputePipeline(gDynamicRHI->createShader(L"shaders/gpu_driven/traditional_cull_instances.hlsl", COMPUTE_SHADER, "CSMain",
 											  {
-												  {"IS_ORTHO_FRUSTUM", view.ortho_frustum ? "1" : "0"},
-												  {"DISABLE_NEAR_CLIP", view.near_clip ? "0" : "1"},
 												  {"THREADGROUP_SIZE", std::to_string(TRADITIONAL_CULLING_THREADGROUP_SIZE).c_str()}
 											  }));
 		gGlobalPipeline->flushAndBind(cmd_list);
 
 		struct
 		{
-			glm::mat4 frustum_view_projection;
+			uint32_t view_id;
+			uint32_t cull_views_buffer_id;
 			uint32_t draw_args_buffer_id;
 			uint32_t draw_count_buffer_id;
 			uint32_t draw_instances_buffer_id;
@@ -189,7 +190,8 @@ void OpaqueGeometryPass::cull_traditional(FrameGraph &fg, const RenderView &view
 			uint32_t instances_count;
 			uint32_t current_pass_mask;
 		} constants = {};
-		constants.frustum_view_projection = view.view_projection;
+		constants.view_id = view.view_id;
+		constants.cull_views_buffer_id = resources.getReadBuffer(GFXRID(CullViews));
 		constants.draw_args_buffer_id = resources.getReadWriteBuffer(GFXRID_ID(TraditionalDrawArgs, view.view_id));
 		constants.draw_count_buffer_id = resources.getReadWriteBuffer(GFXRID_ID(TraditionalDrawCount, view.view_id));
 		constants.draw_instances_buffer_id = resources.getReadWriteBuffer(GFXRID_ID(TraditionalDrawInstances, view.view_id));
@@ -215,6 +217,7 @@ void OpaqueGeometryPass::render_traditional(FrameGraph &fg, const RenderView &vi
 		builder.readIndirectArgsBuffer(GFXRID_ID(TraditionalDrawArgs, view.view_id));
 		builder.readIndirectArgsBuffer(GFXRID_ID(TraditionalDrawCount, view.view_id));
 		builder.readVertexBuffer(GFXRID_ID(TraditionalDrawInstances, view.view_id));
+		builder.readBuffer(GFXRID(CullViews));
 	},
 	[view, targets](const RenderPassResources &resources, RHICommandList *cmd_list)
 	{
@@ -235,11 +238,13 @@ void OpaqueGeometryPass::render_traditional(FrameGraph &fg, const RenderView &vi
 
 		struct
 		{
-			glm::mat4 view_projection;
+			uint32_t view_id;
+			uint32_t cull_views_buffer_id;
 			uint32_t visible_meshlets_buffer_id;
 			uint32_t group_residency_buffer_id;
 		} constants = {};
-		constants.view_projection = view.view_projection;
+		constants.view_id = view.view_id;
+		constants.cull_views_buffer_id = resources.getReadBuffer(GFXRID(CullViews));
 		gDynamicRHI->setConstantBufferData(0, &constants, sizeof(constants));
 
 		cmd_list->drawIndirect(resources.getBuffer(GFXRID_ID(TraditionalDrawArgs, view.view_id)), view.instance_count, resources.getBuffer(GFXRID_ID(TraditionalDrawCount, view.view_id)));

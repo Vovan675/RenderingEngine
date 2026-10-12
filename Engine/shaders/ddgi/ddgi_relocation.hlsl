@@ -2,14 +2,16 @@
 #include "../bindless.h"
 #include "ddgi_common.hlsl"
 
-static StructuredBuffer<DDGIVolume> volumes = ResourceDescriptorHeap[ddgi_volume_buffer_id];
-static DDGIVolume volume = volumes[0];
-static StructuredBuffer<uint> probes_to_update = ResourceDescriptorHeap[volume.probes_to_update_buffer_ids];
+static DDGIVolume volume = ddgi_volume;
 
 cbuffer Constants : register(b1)
 {
 	uint output_atlas_tex_id;
+	uint ray_data_buffer_id;
+	uint probes_to_update_buffer_id;
 };
+
+static StructuredBuffer<uint> probes_to_update = ResourceDescriptorHeap[probes_to_update_buffer_id];
 
 [[vk::image_format("rgba16f")]]
 static RWTexture2DArray<float4> output_atlas = ResourceDescriptorHeap[output_atlas_tex_id];
@@ -21,17 +23,6 @@ struct CSInput
 	uint3 group_thread_id : SV_GroupThreadID;
 	uint group_index : SV_GroupIndex;
 };
-
-[numthreads(32, 1, 1)]
-void CS_ResetRelocation(CSInput input)
-{
-	uint probe_id = input.dispatch_thread_id.x;
-	uint cascade_id = GetProbeCascade(volume, probe_id);
-
-	uint3 probe_coord = GetProbeGridCoords(volume, probe_id);
-	uint2 texel_coord = GetProbeStartTexelCoords(volume, probe_coord);
-	output_atlas[uint3(texel_coord.xy, cascade_id)].xyz = float3(0, 0, 0);
-}
 
 [numthreads(32, 1, 1)]
 void CS_Relocate(CSInput input)
@@ -54,7 +45,7 @@ void CS_Relocate(CSInput input)
 		rays_count = NUM_FIXED_RAYS;
 	#endif
 
-	StructuredBuffer<float4> ray_data_buffer = ResourceDescriptorHeap[volume.ray_data_buffer_id];
+	StructuredBuffer<float4> ray_data_buffer = ResourceDescriptorHeap[ray_data_buffer_id];
 	for (uint ray_index = 0; ray_index < rays_count; ray_index++)
 	{
 		uint ray_data_index = GetRayDataIndex(probe_id, ray_index, volume);

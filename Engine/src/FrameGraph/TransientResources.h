@@ -2,31 +2,32 @@
 #include "RHI/RHITexture.h"
 #include "RHI/RHIBuffer.h"
 
+// Keyed by description, same resource may be reused inside one frame for different purposes.
+// TODO: suballocate from same memory, aka alias it
 class TransientResources
 {
 public:
-	static void init();
-	static void cleanup();
+	void deleteUnused();
 
-	static void update();
+	RHITextureRef getTexture(const TextureDescription &desc);
+	void releaseTexture(RHITextureRef texture);
 
-	static RHITexture *getTemporaryTexture(const TextureDescription &desc);
-	static void releaseTemporaryTexture(RHITexture *texture);
+	RHIBufferRef getBuffer(const BufferDescription &desc);
+	void releaseBuffer(RHIBufferRef buffer);
 
-	static RHIBuffer *getTemporaryBuffer(const BufferDescription &desc);
-	static void releaseTemporaryBuffer(RHIBuffer *buffer);
-
-	struct ResourceEntry
+private:
+	struct TransientTexture
 	{
-		ResourceEntry(RHITextureRef texture, uint64_t last_access_frame, bool is_used): texture(texture), last_access_frame(last_access_frame), is_used(is_used) {}
-		ResourceEntry(RHIBufferRef buffer, uint64_t last_access_frame, bool is_used): buffer(buffer), last_access_frame(last_access_frame), is_used(is_used) {}
-
 		RHITextureRef texture;
-		RHIBufferRef buffer;
-		uint64_t last_access_frame;
-		bool is_used;
+		uint64_t last_frame = 0;
 	};
 
-	static eastl::unordered_map<size_t, eastl::vector<ResourceEntry>> textures;
-	static eastl::unordered_map<size_t, eastl::vector<ResourceEntry>> buffers;
+	struct TransientBuffer
+	{
+		RHIBufferRef buffer;
+		uint64_t last_frame = 0;
+	};
+
+	eastl::unordered_map<size_t, eastl::vector<TransientTexture>> textures;
+	eastl::unordered_map<size_t, eastl::vector<TransientBuffer>> buffers;
 };

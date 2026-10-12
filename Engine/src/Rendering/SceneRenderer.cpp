@@ -13,11 +13,13 @@ SceneRenderer::SceneRenderer()
 	shadow_renderer.debug_renderer = &debug_renderer;
 	geometry_streaming.init();
 
-	frustums_table.init("Frustums Buffer", 64, ReplicationPolicy::Copy);
-	lights_table.init("Lights Buffer", 512, ReplicationPolicy::Copy);
-	materials_table.init("Materials Buffer", 512, ReplicationPolicy::DirtyRows);
-	instances_table.init("Instances Buffer", 65536, ReplicationPolicy::DirtyRows);
-	meshes_table.init("Meshes Buffer", 4096, ReplicationPolicy::DirtyRows);
+	cull_views_table.init(GFXRID(CullViews), 64, ReplicationPolicy::Copy);
+	lights_table.init(GFXRID(LightsBuffer), 512, ReplicationPolicy::Copy);
+	old_lights_table.init(GFXRID(OldLightsBuffer), 512, ReplicationPolicy::Copy);
+	light_index_mapping_table.init(GFXRID(LightIndexMapping), 1024, ReplicationPolicy::Copy);
+	materials_table.init(GFXRID(MaterialsBuffer), 512, ReplicationPolicy::DirtyRows);
+	instances_table.init(GFXRID(InstancesBuffer), 65536, ReplicationPolicy::DirtyRows);
+	meshes_table.init(GFXRID(MeshesBuffer), 4096, ReplicationPolicy::DirtyRows);
 
 	AssetManager::onPreReimport().connect<&SceneRenderer::on_asset_pre_reimport>(this);
 	AssetManager::onPostReimport().connect<&SceneRenderer::on_asset_post_reimport>(this);
@@ -293,17 +295,22 @@ void SceneRenderer::render(Camera *camera, RHITextureRef result_texture)
 
 	update(camera);
 
-	FrameGraph frame_graph;
+	persistent_resources.deleteUndeclared();
+	transient_resources.deleteUnused();
+	FrameGraph frame_graph(persistent_resources, transient_resources);
 
 	frame_graph.importTexture(GFXRID(FinalTexture), result_texture);
 	frame_graph.importTexture(GFXRID(LutBRDF), lut_renderer.brdf_lut_texture);
 	geometry_streaming.importBuffers(frame_graph);
 
-	frustums_table.upload(frame_graph);
+	cull_views_table.upload(frame_graph);
 	lights_table.upload(frame_graph);
+	old_lights_table.upload(frame_graph);
+	light_index_mapping_table.upload(frame_graph);
 	materials_table.upload(frame_graph);
 	instances_table.upload(frame_graph);
 	meshes_table.upload(frame_graph);
+	gUploadManager->flush(frame_graph);
 
 	if (render_first_frame)
 	{
@@ -332,8 +339,6 @@ void SceneRenderer::render(Camera *camera, RHITextureRef result_texture)
 		render_deferred(camera, frame_graph);
 	}
 
-	gUploadManager->flush(frame_graph);
-
 	frame_graph.compile();
 	frame_graph.execute(gDynamicRHI->getCmdList());
 
@@ -349,17 +354,17 @@ void SceneRenderer::render_deferred(Camera *camera, FrameGraph &frame_graph)
 {
 	gpu_frame_cull(frame_graph);
 
-	gbuffer_pass.addPass(frame_graph, indirect_draw_calls_max_count);
+	gbuffer_pass.addPass(frame_graph, main_view_id, indirect_draw_calls_max_count);
 
 	if (GFXOPTIONS(ssao).enabled)
 		ssao_renderer.addPasses(frame_graph);
 
-	if (GFXOPTIONS(ddgi).enabled)
+	if (Renderer::isDDGIEnabled())
 		ddgi_renderer.addPasses(frame_graph, rt_scene);
 
 	{
 		// Shadows
-		if (GFXOPTIONS(shadows).enabled)
+		if (Renderer::isShadowMapsEnabled())
 		{
 			if (Renderer::isRayTracedShadowsEnabled())
 				shadow_renderer.addRayTracedShadowPasses(frame_graph, rt_scene, sun_light_index);
@@ -371,7 +376,10 @@ void SceneRenderer::render_deferred(Camera *camera, FrameGraph &frame_graph)
 
 	{
 		// Lighting
-		defferred_lighting_renderer.renderLights(frame_graph, lights.size());
+		if (Renderer::isRTXDIEnabled())
+			rtxdi_renderer.addPasses(frame_graph, lights_layout);
+		else
+			defferred_lighting_renderer.renderLights(frame_graph, lights.size());
 
 		deffered_composite_renderer.addPasses(frame_graph);
 	}
@@ -382,7 +390,7 @@ void SceneRenderer::render_deferred(Camera *camera, FrameGraph &frame_graph)
 			sky_renderer.addCompositePasses(frame_graph);
 	}
 
-	if (GFXOPTIONS(ddgi).enabled && render_ddgi_visualize)
+	if (Renderer::isDDGIEnabled() && render_ddgi_visualize)
 		ddgi_renderer.addVisualizePass(frame_graph);
 
 	// Render post process (render resolution posts -> upscale -> outpu resolution posts)
@@ -408,20 +416,24 @@ void SceneRenderer::update(Camera *camera)
 {
 	main_view_camera = camera;
 
-	if (GFXOPTIONS(shadows).enabled)
-		shadow_renderer.updateShadows(camera);
-
 	{
 		PROFILE_CPU_SCOPE("SceneRenderer update render data");
 
-		frustums.clear();
-		lights.clear();
-		sun_light_index = INVALID_LIGHT_INDEX;
+		cull_views_table.reset();
 
-		FrustumDataGPU frustum_data;
-		frustum_data.view_projection = camera->getProj() * camera->getView();
-		frustum_data.pass_mask = PASS_MASK_GBUFFER;
-		frustums.push_back(frustum_data);
+		CullViewGPU main_view{};
+		main_view.view_projection = camera->getViewProj();
+		main_view.pass_mask = PASS_MASK_GBUFFER;
+		main_view_id = cull_views_table.add(main_view);
+
+		if (Renderer::isShadowMapsEnabled())
+			shadow_renderer.addCullViews(cull_views_table, camera);
+
+		// Lights
+		eastl::swap(old_lights, lights);
+		lights.clear();
+		eastl::vector<entt::entity> light_entities;
+		uint32_t directional_lights_count = 0;
 
 		auto light_entities_id = Scene::getCurrentScene()->getEntitiesWith<LightComponent>();
 		for (entt::entity light_entity_id : light_entities_id)
@@ -440,54 +452,52 @@ void SceneRenderer::update(Camera *camera)
 			light_gpu.radiance = glm::vec4(light.getPhotometricIntensity(), 1.0f);
 			light_gpu.type = light.getType();
 			light_gpu.attenuation_radius = light.attenuation_radius;
-			light_gpu.shadow_map_tex_id = GFXOPTIONS(shadows).enabled ? light.getShadowMap()->getShaderResourceView()->getBindlessIndex() : 0;
+			light_gpu.shadow_map_tex_id = Renderer::isShadowMapsEnabled() ? light.getShadowMap()->getShaderResourceView()->getBindlessIndex() : 0;
 			for (int i = 0; i < SHADOW_MAP_CASCADE_COUNT; i++)
 			{
 				light_gpu.cascade_view_projection[i] = light.getCascadeViewProj(i);
 				light_gpu.cascade_splits[i] = light.cascades[i].splitDepth;
 			}
-			lights.push_back(light_gpu);
 
-			if (light.getType() == LIGHT_TYPE_POINT)
+			// Directional Lights at beginning, Local Lights just after
+			uint32_t light_index;
+			if (light.getType() == LIGHT_TYPE_DIRECTIONAL)
 			{
-				FrustumDataGPU frustum_data;
-				frustum_data.pass_mask = PASS_MASK_POINT_SHADOW;
-
-				eastl::vector<glm::mat4> faces_transforms;
-				faces_transforms.push_back(glm::lookAtLH(position, position + glm::vec3(1, 0, 0), glm::vec3(0, 1, 0)));
-				faces_transforms.push_back(glm::lookAtLH(position, position + glm::vec3(-1, 0, 0), glm::vec3(0, 1, 0)));
-				faces_transforms.push_back(glm::lookAtLH(position, position + glm::vec3(0, 1, 0), glm::vec3(0, 0, -1)));
-				faces_transforms.push_back(glm::lookAtLH(position, position + glm::vec3(0, -1, 0), glm::vec3(0, 0, 1)));
-				faces_transforms.push_back(glm::lookAtLH(position, position + glm::vec3(0, 0, 1), glm::vec3(0, 1, 0)));
-				faces_transforms.push_back(glm::lookAtLH(position, position + glm::vec3(0, 0, -1), glm::vec3(0, 1, 0)));
-
-				for (int face = 0; face < 6; face++)
-				{
-					frustum_data.view_projection = glm::perspectiveLH(glm::radians(90.0f), 1.0f, POINT_SHADOW_Z_NEAR, light.attenuation_radius) * faces_transforms[face];
-					frustums.push_back(frustum_data);
-				}
-			} else if (light.getType() == LIGHT_TYPE_DIRECTIONAL)
+				light_index = directional_lights_count;
+				directional_lights_count++;
+			} else
 			{
-				if (sun_light_index == INVALID_LIGHT_INDEX)
-					sun_light_index = lights.size() - 1;
-
-				FrustumDataGPU frustum_data;
-				frustum_data.pass_mask = PASS_MASK_DIRECTIONAL_SHADOW;
-				frustum_data.is_ortho = true;
-				frustum_data.near_clip = 0;
-
-				for (int i = 0; i < SHADOW_MAP_CASCADE_COUNT; i++)
-				{
-					frustum_data.view_projection = light.getCascadeViewProj(i);
-					frustums.push_back(frustum_data);
-				}
+				light_index = lights.size();
 			}
+			lights.insert(lights.begin() + light_index, light_gpu);
+			light_entities.insert(light_entities.begin() + light_index, light_entity_id);
 		}
 
-		frustums_table.setArray(0, eastl::span<const FrustumDataGPU>(frustums.data(), frustums.size()));
+		lights_layout.directional_count = directional_lights_count;
+		lights_layout.local_count = lights.size() - directional_lights_count;
+		sun_light_index = directional_lights_count > 0 ? 0 : INVALID_LIGHT_INDEX;
+
+		// First part is "current -> old" mapping, second part is "old -> current" mapping
+		eastl::vector<uint32_t> light_index_mapping(lights.size() + old_lights.size(), UINT32_MAX);
+		eastl::hash_map<entt::entity, uint32_t> light_indices;
+		for (int i = 0; i < lights.size(); i++)
+		{
+			light_indices[light_entities[i]] = i;
+			auto old_index = old_light_indices.find(light_entities[i]);
+			if (old_index == old_light_indices.end())
+				continue;
+			light_index_mapping[i] = old_index->second; // First part
+			light_index_mapping[lights.size() + old_index->second] = i; // Second part
+		}
+		old_light_indices = eastl::move(light_indices);
+
 		lights_table.setArray(0, eastl::span<const LightGPU>(lights.data(), lights.size()));
+		old_lights_table.setArray(0, eastl::span<const LightGPU>(old_lights.data(), old_lights.size()));
+		light_index_mapping_table.setArray(0, eastl::span<const uint32_t>(light_index_mapping.data(), light_index_mapping.size()));
 
 		geometry_streaming.update();
+		if (Renderer::isDDGIEnabled())
+			ddgi_renderer.update();
 
 		static bool last_render_lighting_only = render_lighting_only;
 		if (last_render_lighting_only != render_lighting_only)
@@ -604,18 +614,74 @@ void SceneRenderer::update(Camera *camera)
 		}
 	}
 
-	auto uniforms = Renderer::getDefaultUniforms();
-	uniforms.sky_intensity = GFXOPTIONS(sky).getIntensity();
-	uniforms.camera_exposure = GFXOPTIONS(film).getExposure();
-	uniforms.lights_buffer_id = lights_table.getBindlessIndex();
-	uniforms.lights_count = lights.size();
-	uniforms.materials_buffer_id = materials_table.getBindlessIndex();
-	uniforms.instances_buffer_id = instances_table.getBindlessIndex();
-	uniforms.meshes_buffer_id = meshes_table.getBindlessIndex();
-	uniforms.tlas_id = engine_ray_tracing ? rt_scene->getTopLevelAS()->getBindlessId() : 0;
-	uniforms.ddgi_volume_buffer_id = GFXOPTIONS(ddgi).enabled ? ddgi_renderer.getVolumeBufferId() : 0;
-	uniforms.lines_gpu_buffer_id = debug_renderer.getLinesGpuBuffer()->getUnorderedAccessView()->getBindlessIndex();
-	gDynamicRHI->setConstantBufferDataPerFrame(32, &uniforms, sizeof(uniforms));
+	// Frame constants
+	FrameConstants frame_constants{};
+	frame_constants.time = (float)glfwGetTime();
+	frame_constants.frame = (uint32_t)gDynamicRHI->getFrame();
+	frame_constants.sky_intensity = GFXOPTIONS(sky).getIntensity();
+	frame_constants.camera_exposure = GFXOPTIONS(film).getExposure();
+	frame_constants.lights_buffer_id = lights_table.getBindlessIndex();
+	frame_constants.old_lights_buffer_id = old_lights_table.getBindlessIndex();
+	frame_constants.light_index_mapping_buffer_id = light_index_mapping_table.getBindlessIndex();
+	frame_constants.lights_count = lights.size();
+	if (GlobalBufferCache::getGlobalMeshletGeometryBuffer())
+		frame_constants.global_meshlets_geometry_buffer_id = GlobalBufferCache::getGlobalMeshletGeometryBuffer()->getShaderResourceView()->getBindlessIndex();
+	if (GlobalBufferCache::getGlobalMeshletLodGroupsBuffer())
+		frame_constants.global_meshlets_lod_groups_buffer_id = GlobalBufferCache::getGlobalMeshletLodGroupsBuffer()->getShaderResourceView()->getBindlessIndex();
+	if (GlobalBufferCache::getGlobalLodNodesBuffer())
+		frame_constants.global_lod_nodes_buffer_id = GlobalBufferCache::getGlobalLodNodesBuffer()->getShaderResourceView()->getBindlessIndex();
+	frame_constants.materials_buffer_id = materials_table.getBindlessIndex();
+	frame_constants.instances_buffer_id = instances_table.getBindlessIndex();
+	frame_constants.meshes_buffer_id = meshes_table.getBindlessIndex();
+	frame_constants.tlas_id = engine_ray_tracing ? rt_scene->getTopLevelAS()->getBindlessId() : 0;
+	frame_constants.lines_gpu_buffer_id = debug_renderer.getLinesGpuBuffer()->getUnorderedAccessView()->getBindlessIndex();
+	if (Renderer::isDDGIEnabled())
+		frame_constants.ddgi_volume = ddgi_renderer.getVolume();
+	gDynamicRHI->setConstantBufferDataPerFrame(32, &frame_constants, sizeof(frame_constants));
+
+	// Pass constants
+	float upscale_factor = (float)Renderer::getOutputWidth() / Renderer::getRenderWidth();
+	glm::vec2 jitter = glm::vec2(0.0f);
+	if (Renderer::isUpscalerActive())
+	{
+		// From DLSS guide section 3.7.1.1
+		int phase_count = glm::max(int(8.0f * upscale_factor * upscale_factor), 1);
+		uint32_t index = gDynamicRHI->getFrame() % phase_count + 1;
+		jitter = glm::vec2(Math::halton2D(index) - 0.5f);
+	}
+	glm::mat4 projection = camera->getProj();
+	projection[2][0] += 2.0f * jitter.x / Renderer::getRenderWidth();
+	projection[2][1] -= 2.0f * jitter.y / Renderer::getRenderHeight();
+
+	PassConstants old_pass_constants = pass_constants;
+	pass_constants.view = camera->getView();
+	pass_constants.iview = glm::inverse(pass_constants.view);
+	pass_constants.projection = projection;
+	pass_constants.iprojection = glm::inverse(projection);
+	pass_constants.projection_unjittered = camera->getProj();
+	pass_constants.view_projection = projection * pass_constants.view;
+	pass_constants.view_projection_unjittered = camera->getViewProj();
+	pass_constants.camera_position = glm::vec4(camera->getPosition(), 1.0f);
+	pass_constants.render_resolution = glm::vec4(Renderer::getRenderResolution(), 1.0f / glm::vec2(Renderer::getRenderResolution()));
+	pass_constants.output_resolution = glm::vec4(Renderer::getOutputResolution(), 1.0f / glm::vec2(Renderer::getOutputResolution()));
+	pass_constants.jitter = jitter;
+	pass_constants.z_near = camera->getNear();
+	pass_constants.z_far = camera->getFar();
+	pass_constants.upscale_factor = upscale_factor;
+
+	if (last_update_frame == UINT64_MAX || last_update_frame + 1 != gDynamicRHI->getFrame())
+		old_pass_constants = pass_constants;
+	last_update_frame = gDynamicRHI->getFrame();
+	pass_constants.old_view = old_pass_constants.view;
+	pass_constants.old_iview = old_pass_constants.iview;
+	pass_constants.old_iprojection = old_pass_constants.iprojection;
+	pass_constants.old_projection_unjittered = old_pass_constants.projection_unjittered;
+	pass_constants.old_view_projection_unjittered = old_pass_constants.view_projection_unjittered;
+	pass_constants.old_camera_position = old_pass_constants.camera_position;
+	pass_constants.old_jitter = old_pass_constants.jitter;
+
+	Renderer::setPassConstants(pass_constants);
+	gDynamicRHI->setConstantBufferDataPerFrame(33, &pass_constants, sizeof(pass_constants));
 }
 
 void SceneRenderer::gpu_frame_cull(FrameGraph &frame_graph)
@@ -626,6 +692,7 @@ void SceneRenderer::gpu_frame_cull(FrameGraph &frame_graph)
 	{
 		builder.createBuffer(GFXRID(InstancesPassMask), sizeof(uint32_t), indirect_draw_calls_max_count, BufferUsage::SHADER_WRITE_BUFFER);
 		builder.writeBuffer(GFXRID(InstancesPassMask));
+		builder.readBuffer(GFXRID(CullViews));
 	},
 	[=](const RenderPassResources &resources, RHICommandList *cmd_list)
 	{
@@ -637,14 +704,14 @@ void SceneRenderer::gpu_frame_cull(FrameGraph &frame_graph)
 
 		struct Constants
 		{
-			uint32_t frustums_buffer_id;
-			uint32_t frustums_count;
+			uint32_t cull_views_buffer_id;
+			uint32_t cull_views_count;
 			uint32_t instances_count;
 			uint32_t instances_pass_mask_buffer_id;
 		} constants;
 
-		constants.frustums_buffer_id = frustums_table.getBindlessIndex();
-		constants.frustums_count = frustums.size();
+		constants.cull_views_buffer_id = resources.getReadBuffer(GFXRID(CullViews));
+		constants.cull_views_count = cull_views_table.getMaxUsedSlot();
 		constants.instances_count = indirect_draw_calls_max_count;
 		constants.instances_pass_mask_buffer_id = resources.getReadWriteBuffer(GFXRID(InstancesPassMask));
 

@@ -105,7 +105,7 @@ uint64_t GlobalBufferCache::GlobalBuffer::add(const void *cpu_data, uint64_t siz
 	staging->fill(cpu_data);
 
 	cmd_list->copyBuffer(staging, buffer, 0, offset, size);
-	buffer->transitState(ResourceState::SHADER_RESOURCE);
+	buffer->transitState(cmd_list, ResourceState::SHADER_RESOURCE);
 	return offset;
 }
 
@@ -116,7 +116,7 @@ uint64_t GlobalBufferCache::GlobalBuffer::add(RHIBuffer *src_buffer, uint64_t bu
 		return UINT64_MAX;
 
 	cmd_list->copyBuffer(src_buffer, buffer, buffer_offset, offset, buffer_size);
-	buffer->transitState(ResourceState::SHADER_RESOURCE);
+	buffer->transitState(cmd_list, ResourceState::SHADER_RESOURCE);
 	return offset;
 }
 

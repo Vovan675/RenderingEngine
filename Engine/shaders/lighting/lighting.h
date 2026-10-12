@@ -204,10 +204,8 @@ float getLightShadow(Light light, float3 position, float3 N, float noise)
 	return getPointShadow(light, position, N);
 }
 
-void calculateDirectLight(Light light, float3 P, float3 N, float3 V, float3 albedo, float metalness, float perceptual_roughness, float specular, float visibility, out float3 out_diffuse, out float3 out_specular)
+void shadeDirectLight(float3 L, float3 radiance, float3 N, float3 V, float3 albedo, float metalness, float perceptual_roughness, float specular, out float3 out_diffuse, out float3 out_specular)
 {
-	float3 L;
-	float light_attenuation = getLightAttenuation(light, P, L);
 	float3 H = normalize(V + L);
 	float NdotL = saturate(dot(N, L));
 	float NdotV = saturate(abs(dot(N, V)));
@@ -227,7 +225,14 @@ void calculateDirectLight(Light light, float3 P, float3 N, float3 V, float3 albe
 	float Viz = V_SmithGGXCorrelated(NdotV, NdotL, alpha);
 	float3 F_specular = D * F * Viz;
 
-	float3 irradiance = light.radiance.rgb * light_attenuation * NdotL * visibility;
+	float3 irradiance = radiance * NdotL;
 	out_diffuse = diffuse * irradiance;
 	out_specular = F_specular * irradiance;
+}
+
+void calculateDirectLight(Light light, float3 P, float3 N, float3 V, float3 albedo, float metalness, float perceptual_roughness, float specular, float visibility, out float3 out_diffuse, out float3 out_specular)
+{
+	float3 L;
+	float light_attenuation = getLightAttenuation(light, P, L);
+	shadeDirectLight(L, light.radiance.rgb * light_attenuation * visibility, N, V, albedo, metalness, perceptual_roughness, specular, out_diffuse, out_specular);
 }

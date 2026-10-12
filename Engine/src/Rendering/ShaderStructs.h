@@ -30,6 +30,13 @@ struct LightGPU
 	uint32_t shadow_map_tex_id;
 };
 
+// [Directional Lights ... Local Lights ...]
+struct LightTableLayout
+{
+	uint32_t directional_count = 0;
+	uint32_t local_count = 0;
+};
+
 #define INSTANCE_FLAG_INVALID 0x1
 
 struct InstanceGPU
@@ -134,7 +141,7 @@ struct GroupResidency
 	uint32_t geometry_buffer_offset; // byte offset in global geometry buffer
 };
 
-struct FrustumDataGPU
+struct CullViewGPU
 {
 	glm::mat4 view_projection;
 	uint32_t pass_mask;
@@ -165,4 +172,71 @@ struct DispatchIndirect
 	uint32_t group_x;
 	uint32_t group_y;
 	uint32_t group_z;
+};
+
+struct DDGICascadeGPU
+{
+	glm::vec4 min;
+	glm::vec4 spacing;
+};
+
+struct DDGIVolumeGPU
+{
+	glm::vec3 origin;
+	glm::ivec4 size;
+	glm::vec3 spacing;
+	glm::vec3 random_vector;
+	float random_angle;
+	float use_relocation;
+	float use_classification;
+	uint32_t cascades_count;
+	DDGICascadeGPU cascades[5];
+	uint32_t rays_per_probe;
+	uint32_t getProbesCount() const { return size.x * size.y * size.z * cascades_count; }
+};
+
+struct FrameConstants
+{
+	float time = 0.0f;
+	uint32_t frame = 0;
+	float sky_intensity = 1.0f;
+	float camera_exposure = 1.0f;
+	uint32_t lights_buffer_id = 0;
+	uint32_t old_lights_buffer_id = 0;
+	uint32_t light_index_mapping_buffer_id = 0;
+	uint32_t lights_count = 0;
+	uint32_t global_meshlets_geometry_buffer_id = 0;
+	uint32_t global_meshlets_lod_groups_buffer_id = 0;
+	uint32_t global_lod_nodes_buffer_id = 0;
+	uint32_t materials_buffer_id = 0;
+	uint32_t instances_buffer_id = 0;
+	uint32_t meshes_buffer_id = 0;
+	uint32_t tlas_id = 0;
+	uint32_t lines_gpu_buffer_id = 0;
+	DDGIVolumeGPU ddgi_volume{};
+};
+
+struct PassConstants
+{
+	glm::mat4 view;
+	glm::mat4 iview;
+	glm::mat4 projection;
+	glm::mat4 iprojection;
+	glm::mat4 projection_unjittered;
+	glm::mat4 view_projection;
+	glm::mat4 view_projection_unjittered;
+	glm::mat4 old_view;
+	glm::mat4 old_iview;
+	glm::mat4 old_iprojection;
+	glm::mat4 old_projection_unjittered;
+	glm::mat4 old_view_projection_unjittered;
+	glm::vec4 camera_position;
+	glm::vec4 old_camera_position;
+	glm::vec4 render_resolution; // (w, h, 1/w, 1/h)
+	glm::vec4 output_resolution; // (w, h, 1/w, 1/h)
+	glm::vec2 jitter;
+	glm::vec2 old_jitter;
+	float z_near;
+	float z_far;
+	float upscale_factor;
 };
