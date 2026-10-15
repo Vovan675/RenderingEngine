@@ -296,7 +296,8 @@ void SceneRenderer::render(Camera *camera, RHITextureRef result_texture)
 
 	update(camera);
 
-	persistent_resources.deleteUndeclared();
+	if (!render_keep_persistent_resources)
+		persistent_resources.deleteUndeclared();
 	transient_resources.deleteUnused();
 	FrameGraph frame_graph(persistent_resources, transient_resources);
 
@@ -391,9 +392,6 @@ void SceneRenderer::render_deferred(Camera *camera, FrameGraph &frame_graph)
 			sky_renderer.addCompositePasses(frame_graph);
 	}
 
-	if (Renderer::isDDGIEnabled() && render_ddgi_visualize)
-		ddgi_renderer.addVisualizePass(frame_graph);
-
 	// Render post process (render resolution posts -> upscale -> outpu resolution posts)
 	{
 		if (GFXOPTIONS(ssr).enabled)
@@ -405,6 +403,9 @@ void SceneRenderer::render_deferred(Camera *camera, FrameGraph &frame_graph)
 	}
 
 	debug_renderer.addPasses(frame_graph);
+
+	if (debug_renderer.isEnabled() && Renderer::isDDGIEnabled() && render_ddgi_visualize)
+		ddgi_renderer.addVisualizePass(frame_graph);
 }
 
 void SceneRenderer::render_path_traced(Camera *camera, FrameGraph &frame_graph)

@@ -16,6 +16,7 @@ AutoConVarString engine_startup_scene("engine.startup_scene", "Scene opened at s
 AutoConVarBool render_vsync("render.vsync", "VSync", false);
 AutoConVarBool render_path_tracing_first_frame("render.path_tracing.first_frame", "Is Path Tracing First Frame", true, ConVarFlag::CON_VAR_FLAG_HIDDEN);
 AutoConVarBool render_lighting_only("render.debug.lighting_only", "Lighting Only", false);
+AutoConVarBool render_keep_persistent_resources("render.debug.keep_persistent_resources", "Keep Persistent Resources", false);
 AutoConVarBool render_ddgi_visualize("render.ddgi.visualize", "DDGI Visualize", false);
 AutoConVarInt render_ddgi_visualize_mode("render.ddgi.visualize_mode", "DDGI Visualize Mode", 0, ConVarFlag::CON_VAR_FLAG_HIDDEN);
 AutoConVarBool render_debug_rendering("render.debug.rendering", "Debug Rendering", false, ConVarFlag::CON_VAR_FLAG_HIDDEN);

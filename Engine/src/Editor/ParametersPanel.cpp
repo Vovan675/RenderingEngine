@@ -283,7 +283,7 @@ bool ParametersPanel::renderImGui(EditorContext &context, DebugRenderer &debug_r
 			} else
 			{
 				float length = glm::distance(position, context.editor_camera.getPosition()) * 0.15f;
-				debug_renderer.addArrow(position, position + selected.getLocalDirection(glm::vec3(0, 0, 1)) * length, length * 0.1f, glm::vec3(1, 1, 0));
+				debug_renderer.addArrow(position, position + selected.getLocalDirection(glm::vec3(0, 0, 1)) * length, length * 0.1f, glm::vec3(1, 1, 0), false);
 			}
 		}
 	}

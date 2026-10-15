@@ -112,14 +112,14 @@ void DDGIRenderer::addVisualizePass(FrameGraph &fg)
 	fg.addCallbackPass("DDGI Visualize Pass",
 	[&](RenderPassBuilder &builder)
 	{
-		builder.writeTexture(GFXRID(FinalNoPostTexture));
-		builder.writeTexture(GFXRID(GBufferDepth));
+		builder.writeTexture(GFXRID(FinalTexture));
+		builder.writeTexture(GFXRID(DebugDepth));
 		readAtlases(builder);
 	},
 	[=](const RenderPassResources &resources, RHICommandList *cmd_list)
 	{
-		auto final = resources.getTexture(GFXRID(FinalNoPostTexture));
-		auto depth = resources.getTexture(GFXRID(GBufferDepth));
+		auto final = resources.getTexture(GFXRID(FinalTexture));
+		auto depth = resources.getTexture(GFXRID(DebugDepth));
 
 		cmd_list->setRenderTargets({final}, depth, 0, 0, false);
 

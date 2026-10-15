@@ -102,11 +102,8 @@ PSOutput PSMain(VSInput input)
 			float3 cascade_spacing = cascade.spacing.xyz;
 			float3 cascade_extent = volume.size.xyz * (cascade_spacing * 0.5);
 			float3 cascade_center = cascade.min.xyz + cascade_extent;
-			
-			float view_distance = length(camera_position.xyz - world_pos);
-			float cascade_blend_smooth = frac(max(view_distance - cascade_extent.x, 0) / cascade_spacing.x) * 0.1;
-			float3 cascade_blend_point = world_pos - cascade_center - cascade_blend_smooth * cascade_spacing;
-			
+			float3 cascade_blend_point = world_pos - cascade_center;
+
 			const float blend_size = 0.5f;
 			float fade_distance = cascade_spacing.x * blend_size;
 			

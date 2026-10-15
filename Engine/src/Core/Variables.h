@@ -383,6 +383,7 @@ extern AutoConVarString engine_startup_scene;
 extern AutoConVarBool render_vsync;
 extern AutoConVarBool render_path_tracing_first_frame;
 extern AutoConVarBool render_lighting_only;
+extern AutoConVarBool render_keep_persistent_resources;
 extern AutoConVarBool render_ddgi_visualize;
 extern AutoConVarInt render_ddgi_visualize_mode;
 extern AutoConVarBool render_debug_rendering;

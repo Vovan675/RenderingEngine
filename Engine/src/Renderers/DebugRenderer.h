@@ -39,18 +39,18 @@ public:
 	RHIBufferRef getLinesGpuBuffer() { return lines_gpu_buffer; }
 
 	void addPasses(FrameGraph &fg);
-	static void addDebugOverlay(GraphicsResourceName texture, const wchar_t *shader = L"shaders/debug_overlay.hlsl") { overlays.push_back({texture, shader}); }
+	static void addDebugOverlay(GraphicsResourceName texture, const wchar_t *shader = L"shaders/utility/blit.hlsl") { overlays.push_back({texture, shader}); }
 
-	void addLine(glm::vec3 p0, glm::vec3 p1, glm::vec3 color = glm::vec3(0, 0, 0))
+	void addLine(glm::vec3 p0, glm::vec3 p1, glm::vec3 color = glm::vec3(0, 0, 0), bool use_depth = true)
 	{
 		if (!isEnabled()) return;
 
 		LineVertex &vertex_0 = vertices[lines_index_count];
 		LineVertex &vertex_1 = vertices[lines_index_count + 1];
-		vertex_0.pos = glm::vec4(p0, 0.0);
+		vertex_0.pos = glm::vec4(p0, use_depth ? 0.0f : -1.0f);
 		vertex_0.color = color;
 
-		vertex_1.pos = glm::vec4(p1, 0.0);
+		vertex_1.pos = glm::vec4(p1, use_depth ? 0.0f : -1.0f);
 		vertex_1.color = color;
 		lines_index_count += 2;
 	}
@@ -60,8 +60,8 @@ public:
 	void addFrustum(glm::mat4 frustum, glm::vec3 color = glm::vec3(0, 0, 0));
 	void addSphere(glm::vec3 center, float radius, int segments = 32, glm::vec3 color = glm::vec3(0, 0, 0));
 
-	eastl::vector<glm::vec3> addCirlce(glm::vec3 center, glm::vec3 normal, float radius, int segments, glm::vec3 color = glm::vec3(0, 0, 0));
-	void addArrow(glm::vec3 p0, glm::vec3 p1, float arrow_size, glm::vec3 color = glm::vec3(0, 0, 0));
+	eastl::vector<glm::vec3> addCirlce(glm::vec3 center, glm::vec3 normal, float radius, int segments, glm::vec3 color = glm::vec3(0, 0, 0), bool use_depth = true);
+	void addArrow(glm::vec3 p0, glm::vec3 p1, float arrow_size, glm::vec3 color = glm::vec3(0, 0, 0), bool use_depth = true);
 private:
 	void addTextureDebugPass(FrameGraph &fg);
 	struct DebugOverlay
@@ -70,7 +70,6 @@ private:
 		const wchar_t *shader;
 	};
 
-	void addOverlayPass(FrameGraph &fg, DebugOverlay overlay);
 	void addVisualizerPass(FrameGraph &fg);
 
 	RHIShaderRef vertex_shader_lines;

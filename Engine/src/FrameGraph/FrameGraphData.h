@@ -104,6 +104,7 @@
 #define NRDTransient
 #define NRDValidation
 
+#define DebugDepth
 #define DebugLinesBuffer
 #define DebugLinesDrawArgsBuffer
 

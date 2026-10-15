@@ -4,6 +4,7 @@
 #include "Rendering/Renderer.h"
 #include "Core/Variables.h"
 #include "Rendering/ShaderStructs.h"
+#include "UtilityPasses.h"
 
 #define MAX_NUM_LINES 731072
 
@@ -57,46 +58,13 @@ void DebugRenderer::addPasses(FrameGraph &fg)
 		return;
 	}
 
+	UtilityPasses::addDepthBlitPass(fg, GFXRID(GBufferDepth), GFXRID(DebugDepth), Renderer::getOutputResolution());
 	addVisualizerPass(fg);
 	if (render_debug_rendering)
 		addTextureDebugPass(fg);
 	for (DebugOverlay overlay : overlays)
-		addOverlayPass(fg, overlay);
+		UtilityPasses::addBlitPass(fg, overlay.texture, GFXRID(FinalTexture), UtilityPasses::BLIT_BLEND_ALPHA, overlay.shader);
 	overlays.clear();
-}
-
-void DebugRenderer::addOverlayPass(FrameGraph &fg, DebugOverlay overlay)
-{
-	fg.addCallbackPass("Debug Overlay",
-	[&](RenderPassBuilder &builder)
-	{
-		if (!builder.isTextureCreated(overlay.texture))
-			return;
-		builder.readTexture(overlay.texture);
-		builder.writeTexture(GFXRID(FinalTexture));
-	},
-	[=](const RenderPassResources &resources, RHICommandList *cmd_list)
-	{
-		if (!resources.has(overlay.texture))
-			return;
-
-		cmd_list->setRenderTargets({resources.getTexture(GFXRID(FinalTexture))}, nullptr, -1, 0, false);
-
-		gGlobalPipeline->setupGraphicsPipeline(cmd_list, gDynamicRHI->createShader(L"shaders/quad.hlsl", VERTEX_SHADER),
-		gDynamicRHI->createShader(overlay.shader, FRAGMENT_SHADER), VertexInputsDescription{}, true, false, CULL_MODE_BACK);
-		gGlobalPipeline->setBlendMode(BLEND_SRC_ALPHA, BLEND_ONE_MINUS_SRC_ALPHA, BLEND_OP_ADD, BLEND_ZERO, BLEND_ONE, BLEND_OP_ADD);
-		gGlobalPipeline->flushAndBind(cmd_list);
-
-		struct Constants
-		{
-			uint32_t overlay_tex_id;
-		} constants;
-		constants.overlay_tex_id = resources.getReadTexture(overlay.texture);
-		gDynamicRHI->setConstantBufferData(0, &constants, sizeof(constants));
-
-		cmd_list->drawInstanced(6, 1, 0, 0);
-		cmd_list->resetRenderTargets();
-	});
 }
 
 void DebugRenderer::addBox(glm::vec3 half_extents, glm::mat4 transform, glm::vec3 color)
@@ -198,7 +166,7 @@ void DebugRenderer::addSphere(glm::vec3 center, float radius, int segments, glm:
 	addCirlce(center, glm::vec3(1, 0, 0), radius, segments, color);
 }
 
-eastl::vector<glm::vec3> DebugRenderer::addCirlce(glm::vec3 center, glm::vec3 normal, float radius, int segments, glm::vec3 color)
+eastl::vector<glm::vec3> DebugRenderer::addCirlce(glm::vec3 center, glm::vec3 normal, float radius, int segments, glm::vec3 color, bool use_depth)
 {
 	if (!isEnabled()) return {};
 	eastl::vector<glm::vec3> circle_points;
@@ -224,29 +192,29 @@ eastl::vector<glm::vec3> DebugRenderer::addCirlce(glm::vec3 center, glm::vec3 no
 	// Add lines to draw the circle
 	for (int i = 0; i < segments; ++i)
 	{
-		addLine(circle_points[i], circle_points[(i + 1) % segments], color);
+		addLine(circle_points[i], circle_points[(i + 1) % segments], color, use_depth);
 	}
 
 	return circle_points;
 }
 
-void DebugRenderer::addArrow(glm::vec3 p0, glm::vec3 p1, float arrow_size, glm::vec3 color)
+void DebugRenderer::addArrow(glm::vec3 p0, glm::vec3 p1, float arrow_size, glm::vec3 color, bool use_depth)
 {
 	if (!isEnabled()) return;
 	// Add the main line from p0 to p1
-	addLine(p0, p1, color);
+	addLine(p0, p1, color, use_depth);
 
 	// Calculate the direction from p0 to p1
 	glm::vec3 direction = glm::normalize(p1 - p0);
 
 	// Calculate circle at the base of the arrow
 	float circle_radius = arrow_size * 0.5f; // Adjust circle radius as needed
-	eastl::vector<glm::vec3> circle_points = addCirlce(p1 - direction * arrow_size, direction, circle_radius, 12, color);
+	eastl::vector<glm::vec3> circle_points = addCirlce(p1 - direction * arrow_size, direction, circle_radius, 12, color, use_depth);
 
 	// Add lines from the circle to the arrow tip
 	for (const auto &point : circle_points)
 	{
-		addLine(point, p1, color);
+		addLine(point, p1, color, use_depth);
 	}
 }
 
@@ -331,18 +299,22 @@ void DebugRenderer::addVisualizerPass(FrameGraph & fg)
 	[&](RenderPassBuilder &builder)
 	{
 		builder.writeTexture(GFXRID(FinalTexture));
+		builder.readDepthTexture(GFXRID(DebugDepth));
 	},
 	[=](const RenderPassResources &resources, RHICommandList *cmd_list)
 	{
 		auto final = resources.getTexture(GFXRID(FinalTexture));
+		auto depth = resources.getTexture(GFXRID(DebugDepth));
 
-		cmd_list->setRenderTargets({final}, nullptr, -1, 0, false);
+		cmd_list->setRenderTargets({final}, depth, 0, 0, false);
 
 		VertexInputsDescription input_desc;
 		input_desc.inputs.push_back({"POSITION", 0, FORMAT_R32G32B32A32_SFLOAT});
 		input_desc.inputs.push_back({"COLOR", 0, FORMAT_R32G32B32_SFLOAT});
 		gGlobalPipeline->setupGraphicsPipeline(cmd_list, vertex_shader_lines, fragment_shader_lines,
-								 input_desc, false, false, CULL_MODE_NONE);
+								 input_desc, false, true, CULL_MODE_NONE);
+		gGlobalPipeline->setDepthWrite(false);
+		gGlobalPipeline->setDepthFunc(COMPARE_FUNC_GREATER_EQUAL);
 		gGlobalPipeline->setPrimitiveTopology(TOPOLOGY_LINE_LIST);
 		gGlobalPipeline->flushAndBind(cmd_list);
 
@@ -379,17 +351,21 @@ void DebugRenderer::addVisualizerPass(FrameGraph & fg)
 	[&](RenderPassBuilder &builder)
 	{
 		builder.writeTexture(GFXRID(FinalTexture));
+		builder.readDepthTexture(GFXRID(DebugDepth));
 		builder.readBuffer(GFXRID(DebugLinesBuffer));
 		builder.readIndirectArgsBuffer(GFXRID(DebugLinesDrawArgsBuffer));
 	},
 	[=](const RenderPassResources &resources, RHICommandList *cmd_list)
 	{
 		auto final = resources.getTexture(GFXRID(FinalTexture));
+		auto depth = resources.getTexture(GFXRID(DebugDepth));
 
-		cmd_list->setRenderTargets({final}, nullptr, -1, 0, false);
+		cmd_list->setRenderTargets({final}, depth, 0, 0, false);
 
 		gGlobalPipeline->setupGraphicsPipeline(cmd_list, vertex_shader_gpu_lines, fragment_shader_lines,
-								 {}, false, false, CULL_MODE_NONE);
+								 {}, false, true, CULL_MODE_NONE);
+		gGlobalPipeline->setDepthWrite(false);
+		gGlobalPipeline->setDepthFunc(COMPARE_FUNC_GREATER_EQUAL);
 		gGlobalPipeline->setPrimitiveTopology(TOPOLOGY_LINE_LIST);
 		gGlobalPipeline->flushAndBind(cmd_list);
 

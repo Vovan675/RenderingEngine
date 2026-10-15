@@ -18,10 +18,12 @@ VSOutput VSMain(VSInput input)
 
     if (is_screenspace)
     {
-        output.position = float4(input.position.xyz, 1.0f);
+        output.position = float4(input.position.xy, 1.0f, 1.0f);
     } else
     {
         output.position = mul(view_projection_unjittered, float4(input.position.xyz, 1.0f));
+        if (input.position.a < 0)
+            output.position.z = output.position.w;
     }
     output.color = input.color;
     return output;
@@ -67,7 +69,7 @@ VSOutput VSGpuLines(uint vertex_id : SV_VertexID)
 
     if (is_screenspace)
     {
-        output.position = float4(input.position.xyz, 1.0f);
+        output.position = float4(input.position.xy, 1.0f, 1.0f);
     } else
     {
         output.position = mul(view_projection_unjittered, float4(input.position.xyz, 1.0f));

@@ -29,7 +29,7 @@ VertexOutput VSMain(VertexInput IN) {
 	uint cascade = GetProbeCascade(volume, IN.instance_id);
 	uint3 probe_coords = GetProbeGridCoords(volume, IN.instance_id);
 	float3 probe_position = GetProbeWorldPosition(volume, probe_coords, cascade);
-	OUT.position = mul(projection, mul(view, float4(IN.position * 0.1 + probe_position, 1.0)));
+	OUT.position = mul(view_projection_unjittered, float4(IN.position * 0.1 + probe_position, 1.0));
 	OUT.direction = IN.position;
 	OUT.probe_id = IN.instance_id;
 	OUT.probe_cascade = cascade;
@@ -52,8 +52,9 @@ float4 PSMain(VertexOutput IN) : SV_TARGET {
 	if (mode == 0)
 	{
 		float2 uv = GetProbeUV(volume, probe_coords, normalize(IN.direction), IRRADIANCE_TEXELS);
-		float4 irradiance = irradiance_atlas.Sample(linear_clamp_sampler, float3(uv, IN.probe_cascade));
-		return float4(irradiance.rgb, 1.0);
+		float4 encoded_irradiance = irradiance_atlas.Sample(linear_clamp_sampler, float3(uv, IN.probe_cascade));
+		float3 irradiance = pow(encoded_irradiance.rgb, IRRADIANCE_ENCODE_GAMMA) * PI2 / PI;
+		return LinearToSRGB(float4(irradiance * camera_exposure, 1.0));
 	} else if (mode == 1)
 	{
 		float2 uv = GetProbeUV(volume, probe_coords, normalize(IN.direction), DISTANCE_TEXELS);
