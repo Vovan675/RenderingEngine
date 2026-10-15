@@ -34,6 +34,7 @@ namespace UI
 
 	bool dragFloat(const char *label, float *value, float min_value, float max_value, const char *format = "%.3f", bool logarithmic = false, const char *tooltip = nullptr);
 	bool dragFloat3(const char *label, float *value, float min_value, float max_value, const char *format = "%.3f", bool logarithmic = false, const char *tooltip = nullptr);
+	bool dragFloat3(const char *label, float *value, float speed, const char *tooltip = nullptr);
 	bool dragFloat4(const char *label, float *value, float min_value, float max_value, const char *format = "%.3f", bool logarithmic = false, const char *tooltip = nullptr);
 	bool dragInt3(const char *label, int *value, int min_value, int max_value, const char *format = "%d", bool logarithmic = false, const char *tooltip = nullptr);
 
@@ -84,4 +85,13 @@ namespace UI
 	extern ImFont *font_regular;
 	extern ImFont *font_bold;
 	extern ImFont *font_small;
+
+	constexpr ImVec4 background_color = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
+	constexpr ImVec4 background_dark_color = ImVec4(0.08f, 0.08f, 0.08f, 1.00f);
+	constexpr ImVec4 border_color = ImVec4(0.27f, 0.27f, 0.27f, 1.00f);
+	constexpr ImVec4 accent_color = ImVec4(0.96f, 0.35f, 0.22f, 1.00f);
+	constexpr ImVec4 selection_color = ImVec4(0.22f, 0.31f, 0.53f, 1.00f);
+	constexpr ImVec4 success_color = ImVec4(0.35f, 0.57f, 0.35f, 1.00f);
+	constexpr ImVec4 warning_color = ImVec4(0.80f, 0.40f, 0.00f, 1.00f);
+	constexpr ImVec4 error_color = ImVec4(0.90f, 0.35f, 0.30f, 1.00f);
 }

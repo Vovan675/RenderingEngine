@@ -239,7 +239,7 @@ void TowerGame::update(float dt)
 
 	auto swapchain = gDynamicRHI->getCurrentSwapchainTexture();
 	camera.setAspect(swapchain->getWidth() / (float)swapchain->getHeight());
-	camera.update(dt, gInput.getMousePosition(), mouse_pressed);
+	camera.update(dt, gInput.getMousePosition(), mouse_pressed, false, 0.0f);
 	camera.updateMatrices();
 
 	static bool prev_down = false;

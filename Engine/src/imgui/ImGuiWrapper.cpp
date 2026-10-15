@@ -6,6 +6,7 @@
 #include "Editor/UI.h"
 #include "Rendering/Renderer.h"
 #include "Core/Platform.h"
+#include "Core/Input.h"
 #include "RHI/Vulkan/VulkanDynamicRHI.h"
 #include "RHI/Vulkan/VulkanUtils.h"
 #include "RHI/DX12/DX12DynamicRHI.h"
@@ -98,6 +99,11 @@ void ImGuiWrapper::begin()
 		ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
 	else
 		ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
+
+	if (gInput.isCursorDisabled())
+		ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoMouse;
+	else
+		ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
 
 	if (gDynamicRHI->isVulkan())
 	{

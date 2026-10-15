@@ -34,6 +34,7 @@ public:
 	DebugRenderer();
 
 	bool isEnabled() const;
+	void setEnabled(bool new_enabled) { enabled = new_enabled; }
 
 	RHIBufferRef getLinesGpuBuffer() { return lines_gpu_buffer; }
 
@@ -60,7 +61,7 @@ public:
 	void addSphere(glm::vec3 center, float radius, int segments = 32, glm::vec3 color = glm::vec3(0, 0, 0));
 
 	eastl::vector<glm::vec3> addCirlce(glm::vec3 center, glm::vec3 normal, float radius, int segments, glm::vec3 color = glm::vec3(0, 0, 0));
-	void addArrow(glm::vec3 p0, glm::vec3 p1, float arrow_size);
+	void addArrow(glm::vec3 p0, glm::vec3 p1, float arrow_size, glm::vec3 color = glm::vec3(0, 0, 0));
 private:
 	void addTextureDebugPass(FrameGraph &fg);
 	struct DebugOverlay
@@ -89,6 +90,7 @@ private:
 	RHIBufferRef lines_draw_args_buffer;
 
 	int lines_index_count = 0;
+	bool enabled = true;
 
 	static eastl::vector<DebugOverlay> overlays;
 };

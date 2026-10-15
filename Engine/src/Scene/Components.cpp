@@ -2,6 +2,18 @@
 #include "Components.h"
 #include "Rendering/Model.h"
 #include "Assets/AssetManager.h"
+#include "Scene/Entity.h"
+
+void TransformComponent::setParent(entt::entity new_parent)
+{
+	if (parent != entt::null)
+		Entity(parent).removeChild(owner);
+
+	parent = new_parent;
+	if (parent != entt::null)
+		Entity(parent).getTransform().children.push_back(owner);
+	Scene::propagate_local_transforms_update(owner);
+}
 
 Model *MeshRendererComponent::MeshId::getModel()
 {

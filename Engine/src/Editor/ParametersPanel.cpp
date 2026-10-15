@@ -24,7 +24,7 @@ static void drawComponent(Entity entity, F func)
 	eastl::string title = componentTitle(Reflected<C>::getInfo().name);
 	bool close = true;
 	ImGui::PushFont(UI::font_bold);
-	bool open = ImGui::CollapsingHeader(title.c_str(), &close, ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_FramePadding);
+	bool open = ImGui::CollapsingHeader(title.c_str(), std::is_same_v<C, TransformComponent> ? nullptr : &close, ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_FramePadding);
 	ImGui::PopFont();
 
 	if (open)
@@ -84,28 +84,28 @@ bool ParametersPanel::renderImGui(EditorContext &context, DebugRenderer &debug_r
 
 	auto selected_path = context.selected_path;
 	const AssetTypeInfo *asset_type = AssetManager::findTypeInfoByExtension(selected_path.extension().string().c_str());
-	Entity entity = context.selected_entity;
+	Entity entity = context.getSelectedEntity();
 	bool prefer_asset = context.selection_type == EditorSelectionType::Asset && !selected_path.empty();
 	if (entity && !prefer_asset)
 	{
 		drawComponent<TransformComponent>(entity, [&](TransformComponent &transform_component) {
 			glm::vec3 position = transform_component.getLocalPosition();
-			if (UI::inputFloat3("Position", position.data.data))
+			if (UI::dragFloat3("Position", position.data.data, 0.01f))
 				transform_component.setPosition(position);
 
 			glm::vec3 rotation = glm::degrees(transform_component.getLocalRotationEuler());
-			if (UI::inputFloat3("Rotation", rotation.data.data))
+			if (UI::dragFloat3("Rotation", rotation.data.data, 0.5f))
 				transform_component.setLocalRotationEuler(glm::radians(rotation));
 
 			glm::vec3 scale = transform_component.getLocalScale();
-			if (UI::inputFloat3("Scale", scale.data.data))
+			if (UI::dragFloat3("Scale", scale.data.data, 0.01f))
 				transform_component.setLocalScale(scale);
 		});
 
 		drawComponent<MeshRendererComponent>(entity, [&](MeshRendererComponent &mesh_renderer)
 		{
 			if (mesh_renderer.meshes.empty())
-				ImGui::TextColored(ImVec4(0.90f, 0.35f, 0.30f, 1.0f), "No mesh");
+				ImGui::TextColored(UI::error_color, "No mesh");
 
 			AssetReference model_reference;
 			if (!mesh_renderer.meshes.empty())
@@ -246,7 +246,7 @@ bool ParametersPanel::renderImGui(EditorContext &context, DebugRenderer &debug_r
 			reimported = false;
 			bool highlight_reimport = settings_dirty;
 			if (highlight_reimport)
-				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.4f, 0.0f, 1.0f));
+				ImGui::PushStyleColor(ImGuiCol_Button, UI::warning_color);
 			if (ImGui::Button("Reimport", ImVec2(-FLT_MIN, 0)))
 			{
 				reimported = true;
@@ -270,6 +270,20 @@ bool ParametersPanel::renderImGui(EditorContext &context, DebugRenderer &debug_r
 				Engine::Mesh *mesh = mesh_id.getMesh();
 				if (mesh)
 					debug_renderer.addBoundBox(mesh->bound_box * selected.getWorldTransformMatrix());
+			}
+		}
+
+		if (selected.hasComponent<LightComponent>())
+		{
+			auto &light = selected.getComponent<LightComponent>();
+			glm::vec3 position = selected.getWorldTransformMatrix()[3];
+			if (light.getType() == LIGHT_TYPE_POINT)
+			{
+				debug_renderer.addSphere(position, light.attenuation_radius, 32, glm::vec3(1, 1, 0));
+			} else
+			{
+				float length = glm::distance(position, context.editor_camera.getPosition()) * 0.15f;
+				debug_renderer.addArrow(position, position + selected.getLocalDirection(glm::vec3(0, 0, 1)) * length, length * 0.1f, glm::vec3(1, 1, 0));
 			}
 		}
 	}

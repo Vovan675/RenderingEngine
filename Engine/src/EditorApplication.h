@@ -47,6 +47,9 @@ private:
 
 	bool auto_refresh_shaders = true;
 	bool was_window_focused = true;
+	bool viewport_fullscreen = false;
+	bool is_camera_look = false;
+	bool is_camera_pan = false;
 	FileWatcher shaders_watcher;
 
 	Ref<RayTracingScene> ray_tracing_scene;

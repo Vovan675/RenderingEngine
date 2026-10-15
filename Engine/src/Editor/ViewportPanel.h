@@ -7,9 +7,10 @@
 class ViewportPanel
 {
 public:
-	bool renderImGui(EditorContext &context, float delta_time);
+	bool renderImGui(EditorContext &context, float delta_time, bool fullscreen);
 	void update();
 	RHITextureRef viewport_texture;
 private:
 	ImGuizmo::OPERATION guizmo_tool_type = ImGuizmo::TRANSLATE;
+	glm::mat4 guizmo_pivot = glm::mat4(1.0f);
 };

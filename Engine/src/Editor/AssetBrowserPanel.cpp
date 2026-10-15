@@ -101,7 +101,7 @@ bool AssetBrowserPanel::renderImGui(EditorContext &context)
 		} else
 		{
 			auto file_icon = get_file_icon(child_path);
-			ImVec4 color = child_path == context.selected_path ? ImVec4(0.6, 0.6, 0.6, 1.0) : ImVec4();
+			ImVec4 color = child_path == context.selected_path ? UI::selection_color : ImVec4();
 			ImGui::ImageButton(entry.name.c_str(), ImGuiWrapper::getTextureId(file_icon), tile_size, {0, 0}, {1, 1}, color);
 			process_drag_drop_source(child_path);
 			process_asset_context_menu(child_path, context);

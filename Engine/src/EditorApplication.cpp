@@ -80,7 +80,7 @@ float EditorApplication::draw_top_bar()
 		ImGui::SetCursorPosX(12);
 
 		ImGui::PushFont(UI::font_bold);
-		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.96f, 0.35f, 0.22f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_Text, UI::accent_color);
 		ImGui::TextUnformatted(ICON_FA_SUN "  SOLIS");
 		ImGui::PopStyleColor();
 		ImGui::PopFont();
@@ -126,7 +126,7 @@ float EditorApplication::draw_top_bar()
 
 		ImGui::SameLine(0, 24);
 
-		if (tool_button(is_play ? ICON_FA_STOP : ICON_FA_PLAY, is_play ? ImVec4(0.73f, 0.32f, 0.32f, 1.0f) : ImVec4(0.35f, 0.57f, 0.35f, 1.0f)))
+		if (tool_button(is_play ? ICON_FA_STOP : ICON_FA_PLAY, is_play ? UI::error_color : UI::success_color))
 			toggle_play();
 
 		ImGui::PopStyleVar();
@@ -185,7 +185,6 @@ void EditorApplication::toggle_play()
 	static Ref<Scene> saved_scene = nullptr;
 
 	is_play = !is_play;
-	context.selected_entity = Entity();
 
 	if (is_play)
 	{
@@ -198,6 +197,7 @@ void EditorApplication::toggle_play()
 		// Revert scene
 		Scene::setCurrentScene(saved_scene);
 		saved_scene = nullptr;
+		eastl::erase_if(context.selected_entities, [&](entt::entity id) { return !Scene::getCurrentScene()->isValid(id); });
 	}
 }
 
@@ -222,7 +222,6 @@ void EditorApplication::init()
 
 void EditorApplication::openScene(const eastl::string &path)
 {
-	context.selected_entity = Entity();
 	context.selected_entities.clear();
 	context.selected_path.clear();
 
@@ -256,7 +255,16 @@ void EditorApplication::update(float delta_time)
 		});
 	}
 
-	float top_bar_height = draw_top_bar();
+	bool toggle_fullscreen = (gInput.isKeyPressed(GLFW_KEY_F) || (viewport_fullscreen && gInput.isKeyPressed(GLFW_KEY_ESCAPE))) && !ImGui::GetIO().WantTextInput;
+	if (toggle_fullscreen)
+	{
+		viewport_fullscreen = !viewport_fullscreen;
+		scene_renderer->debug_renderer.setEnabled(!viewport_fullscreen);
+		Platform::setTitleBarDragRect(0, 0, 0);
+		Platform::setMaximizeButtonRect(0, 0, 0, 0);
+	}
+
+	float top_bar_height = viewport_fullscreen ? 0.0f : draw_top_bar();
 
 	ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking;
 
@@ -277,34 +285,42 @@ void EditorApplication::update(float delta_time)
 	ImGui::PopStyleVar();
 	ImGui::PopStyleVar();
 
-	ImGui::DockSpace(ImGui::GetID("EngineDockSpace"));
+	ImGui::DockSpace(ImGui::GetID("EngineDockSpace"), ImVec2(0, 0), viewport_fullscreen ? ImGuiDockNodeFlags_KeepAliveOnly : ImGuiDockNodeFlags_None);
 
 	ImGui::End();
 
 	// Common
 	// Add rect over full window (resize bar)
 	if (!glfwGetWindowAttrib(window, GLFW_MAXIMIZED))
-		ImGui::GetForegroundDrawList()->AddRect(viewport->Pos, ImVec2(viewport->Pos.x + viewport->Size.x, viewport->Pos.y + viewport->Size.y), IM_COL32(70, 70, 70, 255));
+		ImGui::GetForegroundDrawList()->AddRect(viewport->Pos, ImVec2(viewport->Pos.x + viewport->Size.x, viewport->Pos.y + viewport->Size.y), ImGui::GetColorU32(UI::border_color));
 
 	// Viewport
-	static bool prev_is_viewport_focused = false;
-	bool is_viewport_focused = viewport_panel.renderImGui(context, delta_time);
+	bool is_viewport_hovered = viewport_panel.renderImGui(context, delta_time, viewport_fullscreen);
 
-	render_settings_panel.renderImGui(context);
-	debug_panel.renderImGui(context);
-
-	// Hierarchy
-	hierarchy_panel.renderImGui(context);
-	// Parameters
-	parameters_panel.renderImGui(context, scene_renderer->debug_renderer, asset_browser_panel);
-
-	// Asset browser
-	asset_browser_panel.renderImGui(context);
-
-	if (gInput.isKeyDown(GLFW_KEY_ESCAPE))
+	if (!viewport_fullscreen)
 	{
-		context.selected_entity = Entity();
+		render_settings_panel.renderImGui(context);
+		debug_panel.renderImGui(context);
+
+		// Hierarchy
+		hierarchy_panel.renderImGui(context);
+		// Parameters
+		parameters_panel.renderImGui(context, scene_renderer->debug_renderer, asset_browser_panel);
+
+		// Asset browser
+		asset_browser_panel.renderImGui(context);
+	}
+
+	if (gInput.isKeyPressed(GLFW_KEY_ESCAPE) && !toggle_fullscreen && !ImGui::GetIO().WantTextInput)
+	{
+		context.selected_entities.clear();
 		context.selected_path.clear();
+	}
+
+	if (gInput.isKeyDown(GLFW_KEY_LEFT_CONTROL) && gInput.isKeyPressed(GLFW_KEY_D) && !ImGui::GetIO().WantTextInput)
+	{
+		for (entt::entity &id : context.selected_entities)
+			id = Scene::getCurrentScene()->duplicateEntity(id);
 	}
 
 	if (ImGui::IsKeyPressed(ImGuiKey_M, false) && !ImGui::GetIO().WantTextInput)
@@ -312,16 +328,15 @@ void EditorApplication::update(float delta_time)
 
 	viewport_panel.update();
 
-	if (!ImGuizmo::IsUsing() && is_viewport_focused)
-	{
-		double mouse_x, mouse_y;
-		glfwGetCursorPos(window, &mouse_x, &mouse_y);
-		bool mouse_pressed = prev_is_viewport_focused != is_viewport_focused ? 0 : glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1) == GLFW_PRESS;
-		context.editor_camera.update(delta_time, glm::vec2(mouse_x, mouse_y), mouse_pressed);
-	}
-	context.editor_camera.updateMatrices();
+	bool can_start_drag = is_viewport_hovered && !ImGuizmo::IsUsing();
+	is_camera_look = gInput.isMouseKeyDown(GLFW_MOUSE_BUTTON_RIGHT) && (is_camera_look || (can_start_drag && gInput.isMouseKeyPressed(GLFW_MOUSE_BUTTON_RIGHT)));
+	is_camera_pan = gInput.isMouseKeyDown(GLFW_MOUSE_BUTTON_MIDDLE) && (is_camera_pan || (can_start_drag && gInput.isMouseKeyPressed(GLFW_MOUSE_BUTTON_MIDDLE)));
 
-	prev_is_viewport_focused = is_viewport_focused;
+	float mouse_wheel = is_camera_look || is_viewport_hovered ? gInput.getMouseWheel() : 0.0f;
+	context.editor_camera.update(delta_time, gInput.getMousePosition(), is_camera_look, is_camera_pan, mouse_wheel);
+	gInput.setCursorDisabled(is_camera_look);
+	if (is_camera_look || is_camera_pan)
+		ImGui::SetWindowFocus(nullptr);
 
 	Scene::getCurrentScene()->physics_scene->draw_debug(&scene_renderer->debug_renderer);
 	if (is_play)

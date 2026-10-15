@@ -21,8 +21,10 @@ public:
 	Entity createEntity(eastl::string name);
 	Entity createEntity(eastl::string name, entt::entity id);
 	Entity findEntityByName(eastl::string name);
+	bool isValid(entt::entity id) const { return registry.valid(id); }
 
 	void destroyEntity(entt::entity id);
+	Entity duplicateEntity(entt::entity id);
 
 	void markDirty(entt::entity entity, uint32_t channels);
 	uint32_t getDirtyFlags(entt::entity entity) const;

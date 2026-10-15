@@ -44,13 +44,19 @@ DebugRenderer::DebugRenderer()
 
 bool DebugRenderer::isEnabled() const
 {
-	return !GFXOPTIONS(path_tracing);
+	return enabled && !GFXOPTIONS(path_tracing);
 }
 
 eastl::vector<DebugRenderer::DebugOverlay> DebugRenderer::overlays;
 
 void DebugRenderer::addPasses(FrameGraph &fg)
 {
+	if (!isEnabled())
+	{
+		overlays.clear();
+		return;
+	}
+
 	addVisualizerPass(fg);
 	if (render_debug_rendering)
 		addTextureDebugPass(fg);
@@ -190,24 +196,6 @@ void DebugRenderer::addSphere(glm::vec3 center, float radius, int segments, glm:
 	addCirlce(center, glm::vec3(0, 0, 1), radius, segments, color);
 	addCirlce(center, glm::vec3(0, 1, 0), radius, segments, color);
 	addCirlce(center, glm::vec3(1, 0, 0), radius, segments, color);
-	
-	glm::vec3 diagonal_normal = glm::normalize(glm::vec3(1, 1, 0));
-	if (glm::length(diagonal_normal) > 0.001f)
-	{
-		addCirlce(center, diagonal_normal, radius, segments, color);
-	}
-	
-	diagonal_normal = glm::normalize(glm::vec3(1, 0, 1));
-	if (glm::length(diagonal_normal) > 0.001f)
-	{
-		addCirlce(center, diagonal_normal, radius, segments, color);
-	}
-	
-	diagonal_normal = glm::normalize(glm::vec3(0, 1, 1));
-	if (glm::length(diagonal_normal) > 0.001f)
-	{
-		addCirlce(center, diagonal_normal, radius, segments, color);
-	}
 }
 
 eastl::vector<glm::vec3> DebugRenderer::addCirlce(glm::vec3 center, glm::vec3 normal, float radius, int segments, glm::vec3 color)
@@ -242,39 +230,24 @@ eastl::vector<glm::vec3> DebugRenderer::addCirlce(glm::vec3 center, glm::vec3 no
 	return circle_points;
 }
 
-void DebugRenderer::addArrow(glm::vec3 p0, glm::vec3 p1, float arrow_size)
+void DebugRenderer::addArrow(glm::vec3 p0, glm::vec3 p1, float arrow_size, glm::vec3 color)
 {
 	if (!isEnabled()) return;
 	// Add the main line from p0 to p1
-	addLine(p0, p1);
+	addLine(p0, p1, color);
 
 	// Calculate the direction from p0 to p1
 	glm::vec3 direction = glm::normalize(p1 - p0);
 
 	// Calculate circle at the base of the arrow
 	float circle_radius = arrow_size * 0.5f; // Adjust circle radius as needed
-	eastl::vector<glm::vec3> circle_points = addCirlce(p1 - direction * arrow_size, direction, circle_radius, 12);
+	eastl::vector<glm::vec3> circle_points = addCirlce(p1 - direction * arrow_size, direction, circle_radius, 12, color);
 
 	// Add lines from the circle to the arrow tip
 	for (const auto &point : circle_points)
 	{
-		addLine(point, p1);
+		addLine(point, p1, color);
 	}
-
-	// Calculate perpendicular vectors to create the arrowhead
-	glm::vec3 perpendicular1 = glm::normalize(glm::cross(direction, glm::vec3(0, 1, 0)));
-	glm::vec3 perpendicular2 = glm::normalize(glm::cross(direction, perpendicular1));
-
-	glm::vec3 arrowhead_point1 = p1 - direction * arrow_size + perpendicular1 * (arrow_size / 2.0f);
-	glm::vec3 arrowhead_point2 = p1 - direction * arrow_size - perpendicular1 * (arrow_size / 2.0f);
-	glm::vec3 arrowhead_point3 = p1 - direction * arrow_size + perpendicular2 * (arrow_size / 2.0f);
-	glm::vec3 arrowhead_point4 = p1 - direction * arrow_size - perpendicular2 * (arrow_size / 2.0f);
-
-	// Add the arrowhead lines
-	addLine(p1, arrowhead_point1);
-	addLine(p1, arrowhead_point2);
-	addLine(p1, arrowhead_point3);
-	addLine(p1, arrowhead_point4);
 }
 
 void DebugRenderer::addTextureDebugPass(FrameGraph &fg)

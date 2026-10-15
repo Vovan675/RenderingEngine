@@ -124,7 +124,7 @@ void RenderSettingsPanel::renderImGui(EditorContext &context)
 			Camera &camera = context.editor_camera;
 
 			float speed = camera.getSpeed();
-			if (UI::sliderFloat("Speed", &speed, 0.1f, 10.0f, "%.2f"))
+			if (UI::sliderFloat("Speed", &speed, 0.05f, 1000.0f, "%.2f m/s", true))
 				camera.setSpeed(speed);
 
 			float near_plane = camera.getNear();
@@ -132,7 +132,7 @@ void RenderSettingsPanel::renderImGui(EditorContext &context)
 				camera.setNear(near_plane);
 
 			float far_plane = camera.getFar();
-			if (UI::sliderFloat("Far", &far_plane, 1.0f, 300.0f, "%.1f"))
+			if (UI::sliderFloat("Far", &far_plane, 1.0f, 100000.0f, "%.0f m", true))
 				camera.setFar(far_plane);
 
 			glm::vec3 position = camera.getPosition();
@@ -173,10 +173,10 @@ void RenderSettingsPanel::renderImGui(EditorContext &context)
 			UI::checkbox("Dolly Zoom", &dolly_zoom, "Keep the subject the same size while the focal length changes");
 			ImGui::BeginDisabled(!dolly_zoom);
 			UI::sliderFloat("Subject Distance", &subject_distance, 0.1f, 1000.0f, "%.2f m", true);
-			ImGui::BeginDisabled(!context.selected_entity);
+			ImGui::BeginDisabled(!context.getSelectedEntity());
 			if (ImGui::Button("Subject Distance From Selection", ImVec2(-FLT_MIN, 0)))
 			{
-				glm::vec3 target = glm::vec3(context.selected_entity.getWorldTransformMatrix()[3]);
+				glm::vec3 target = glm::vec3(context.getSelectedEntity().getWorldTransformMatrix()[3]);
 				subject_distance = glm::length(target - camera.getPosition());
 			}
 			ImGui::EndDisabled();

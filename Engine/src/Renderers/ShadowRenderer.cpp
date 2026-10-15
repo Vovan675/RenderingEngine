@@ -43,7 +43,6 @@ void ShadowRenderer::addCullViews(GpuTable<CullViewGPU> &cull_views, Camera *cam
 		if (light.getType() == LIGHT_TYPE_DIRECTIONAL)
 		{
 			glm::vec3 light_dir = transform.getLocalDirection(glm::vec3(0, 0, 1));
-			debug_renderer->addArrow(position, position + light_dir, 0.1);
 			update_cascades(light, light_dir, camera);
 
 			if (Renderer::isRayTracedShadowsEnabled())

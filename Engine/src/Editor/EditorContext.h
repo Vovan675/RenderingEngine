@@ -12,8 +12,9 @@ struct EditorContext
 	Camera editor_camera;
 	EditorSelectionType selection_type = EditorSelectionType::Entity;
 
-	Entity selected_entity;
 	eastl::vector<entt::entity> selected_entities;
+	Entity getSelectedEntity() const { return selected_entities.empty() ? Entity() : Entity(selected_entities.back()); }
+	bool isSelected(entt::entity id) const { return eastl::find(selected_entities.begin(), selected_entities.end(), id) != selected_entities.end(); }
 
 	std::filesystem::path selected_path;
 

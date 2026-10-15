@@ -19,45 +19,61 @@ public:
 		updateMatrices();
 	}
 
-	void update(float dt, glm::vec2 mouse_pos, bool mouse_pressed)
+	void update(float dt, glm::vec2 mouse_pos, bool look, bool pan, float mouse_wheel)
 	{
 		PROFILE_CPU_FUNCTION();
-		if (mouse_pressed)
-		{
-			glm::vec2 delta_pos = mouse_pos - prev_mouse_pos;
-			delta_pos *= 0.003f;
-			pitch -= delta_pos.y;
-			yaw -= delta_pos.x;
-			updateMatrices();
-		}
+		dt = glm::min(dt, 0.1f);
+
+		bool dragging = look || pan;
+		glm::vec2 mouse_delta = dragging && was_dragging ? mouse_pos - prev_mouse_pos : glm::vec2(0, 0);
 		prev_mouse_pos = mouse_pos;
+		was_dragging = dragging;
+
+		if (look)
+		{
+			pending_rotation += mouse_delta * 0.003f;
+			speed = glm::clamp(speed * powf(1.2f, mouse_wheel), 0.05f, 1000.0f);
+		}
+		glm::vec2 rotation_step = glm::length(pending_rotation) < 0.001f ? pending_rotation : pending_rotation * (1.0f - expf(-dt * 30.0f));
+		pending_rotation -= rotation_step;
+		pitch = glm::clamp(pitch - rotation_step.y, glm::radians(-89.0f), glm::radians(89.0f));
+		yaw -= rotation_step.x;
+		updateMatrices();
 
 		glm::vec3 forward = getForward();
 		glm::vec3 right = getRight();
 		glm::vec3 up = getUp();
 
-		glm::vec3 movement = glm::vec3(0, 0, 0);
-		if (gInput.isKeyDown(GLFW_KEY_W))
-			movement += forward;
-		if (gInput.isKeyDown(GLFW_KEY_S))
-			movement -= forward;
-		if (gInput.isKeyDown(GLFW_KEY_A))
-			movement -= right;
-		if (gInput.isKeyDown(GLFW_KEY_D))
-			movement += right;
-		if (gInput.isKeyDown(GLFW_KEY_E))
-			movement += up;
-		if (gInput.isKeyDown(GLFW_KEY_Q))
-			movement -= up;
-		
-		if (gInput.isKeyDown(GLFW_KEY_LEFT_SHIFT))
-			movement *= 2.0f;
+		glm::vec3 target_velocity = glm::vec3(0, 0, 0);
+		if (look)
+		{
+			if (gInput.isKeyDown(GLFW_KEY_W))
+				target_velocity += forward;
+			if (gInput.isKeyDown(GLFW_KEY_S))
+				target_velocity -= forward;
+			if (gInput.isKeyDown(GLFW_KEY_A))
+				target_velocity -= right;
+			if (gInput.isKeyDown(GLFW_KEY_D))
+				target_velocity += right;
+			if (gInput.isKeyDown(GLFW_KEY_E))
+				target_velocity += up;
+			if (gInput.isKeyDown(GLFW_KEY_Q))
+				target_velocity -= up;
+			if (target_velocity != glm::vec3(0, 0, 0))
+				target_velocity = glm::normalize(target_velocity) * speed * (gInput.isKeyDown(GLFW_KEY_LEFT_SHIFT) ? 3.0f : 1.0f);
+		}
+		velocity += (target_velocity - velocity) * (1.0f - expf(-dt * 10.0f));
+		if (target_velocity == glm::vec3(0, 0, 0) && glm::length(velocity) < speed * 0.05f)
+			velocity = glm::vec3(0, 0, 0);
+		if (!look)
+			velocity += forward * mouse_wheel * speed;
+		position += velocity * dt;
 
-		if (movement != glm::vec3(0, 0, 0) || mouse_pressed)
+		if (pan)
+			position += (up * mouse_delta.y - right * mouse_delta.x) * speed * 0.002f;
+
+		if (mouse_delta != glm::vec2(0, 0) || velocity != glm::vec3(0, 0, 0) || pending_rotation != glm::vec2(0, 0))
 			render_path_tracing_first_frame = true;
-
-		movement *= dt * speed;
-		position += movement;
 		updateMatrices();
 	}
 
@@ -126,6 +142,9 @@ private:
 	float fov = 45.0f;
 
 	glm::vec2 prev_mouse_pos;
+	bool was_dragging = false;
+	glm::vec2 pending_rotation = glm::vec2(0, 0);
+	glm::vec3 velocity = glm::vec3(0, 0, 0);
 
 	float near_plane = 0.1f;
 	float far_plane = 10000.0f;
@@ -138,4 +157,5 @@ REFLECT_BEGIN(Camera)
 	REFLECT_FIELD(position),
 	REFLECT_FIELD(pitch),
 	REFLECT_FIELD(yaw),
+	REFLECT_FIELD(speed),
 REFLECT_END()

@@ -99,7 +99,7 @@ static void write_components(YAML::Emitter &out, Entity entity)
 
 		const StructInfo &info = Reflected<Component>::getInfo();
 		out << YAML::Key << info.name << YAML::Value << YAML::BeginMap;
-		ReflectionYaml::writeFields(out, info, &entity.getComponent<Component>(), nullptr);
+		ReflectionYaml::writeFields(out, info, &entity.getComponent<Component>(), info.defaults);
 		out << YAML::EndMap;
 	}(), ...);
 }
@@ -141,12 +141,40 @@ Ref<Scene> Scene::copy()
 	auto view = registry.view<TransformComponent>();
 
 	for (auto [e, transform] : view.each())
-	{
 		scene->createEntity(transform.name, e);
-	}
 
 	copy_component<ALL_COMPONENTS>(registry, scene->registry);
 	return scene;
+}
+
+Entity Scene::duplicateEntity(entt::entity id)
+{
+	eastl::function<Entity(entt::entity, entt::entity)> duplicate = [&](entt::entity source_id, entt::entity parent_id)
+	{
+		YAML::Emitter out;
+		out << YAML::BeginMap;
+		write_components<ALL_COMPONENTS>(out, Entity(source_id));
+		out << YAML::EndMap;
+
+		Entity entity = createEntity("");
+		read_components<ALL_COMPONENTS>(YAML::Load(out.c_str()), entity);
+
+		entity.getTransform().parent = parent_id;
+		for (entt::entity child_id : Entity(source_id).getChildren())
+		{
+			Entity child = duplicate(child_id, entity);
+			entity.getTransform().children.push_back(child);
+		}
+		return entity;
+	};
+
+	entt::entity parent_id = registry.get<TransformComponent>(id).parent;
+	Entity copy = duplicate(id, parent_id);
+	copy.getTransform().name += " (Copy)";
+	if (parent_id != entt::null)
+		registry.get<TransformComponent>(parent_id).children.push_back(copy);
+	propagate_local_transforms_update(copy);
+	return copy;
 }
 
 void Scene::saveFile(const eastl::string &filename)
@@ -156,7 +184,15 @@ void Scene::saveFile(const eastl::string &filename)
 
 	out << YAML::BeginMap;
 	out << YAML::Key << "Entities" << YAML::Value << YAML::BeginSeq;
-	for (entt::entity entity_id : registry.view<entt::entity>())
+
+	eastl::vector<entt::entity> entities;
+	for (entt::entity entity_id : registry.view<TransformComponent>())
+		entities.push_back(entity_id);
+
+	// Sort by id (less diff)
+	eastl::sort(entities.begin(), entities.end());
+
+	for (entt::entity entity_id : entities)
 	{
 		out << YAML::BeginMap;
 		out << YAML::Key << "Entity" << YAML::Value << (uint32_t)entity_id;
@@ -192,6 +228,12 @@ void Scene::loadFile(const eastl::string &filename)
 			entity_id = (entt::entity)id_node.as<uint32_t>();
 
 		read_components<ALL_COMPONENTS>(entity, createEntity("", entity_id));
+	}
+
+	for (auto [entity_id, transform] : registry.view<TransformComponent>().each())
+	{
+		if (transform.parent != entt::null)
+			registry.get<TransformComponent>(transform.parent).children.push_back(entity_id);
 	}
 
 	for (auto [entity_id, transform] : registry.view<TransformComponent>().each())

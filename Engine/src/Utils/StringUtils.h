@@ -28,6 +28,32 @@ inline eastl::string prettifyName(const char *name, const char *word_separator =
 	return result;
 }
 
+// Compare by lower name and number "Light_2" < "Light_10"
+inline int prettyCompare(const char *a, const char *b)
+{
+	while (*a && *b)
+	{
+		if (isdigit(*a) && isdigit(*b))
+		{
+			char *a_end;
+			char *b_end;
+			long long difference = strtoll(a, &a_end, 10) - strtoll(b, &b_end, 10);
+			if (difference != 0)
+				return difference < 0 ? -1 : 1;
+			a = a_end;
+			b = b_end;
+		} else
+		{
+			int difference = tolower(*a) - tolower(*b);
+			if (difference != 0)
+				return difference;
+			a++;
+			b++;
+		}
+	}
+	return *a - *b;
+}
+
 inline eastl::wstring unicode_to_wstring(const char *input)
 {
 	if (input == nullptr)

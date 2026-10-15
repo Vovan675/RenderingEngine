@@ -21,7 +21,6 @@
 #include <imgui.h>
 #include "Tracy.hpp"
 
-Input gInput;
 DynamicRHI *gDynamicRHI = nullptr;
 GlobalPipeline *gGlobalPipeline = nullptr;
 UploadManager *gUploadManager = nullptr;
@@ -40,11 +39,6 @@ Application::Application(int argc, char *argv[])
 	glfwSetFramebufferSizeCallback(window, [](GLFWwindow *window, int width, int height)
 	{
 		static_cast<Application *>(glfwGetWindowUserPointer(window))->framebuffer_resize_callback(window, width, height);
-	});
-
-	glfwSetKeyCallback(window, [](GLFWwindow *window, int key, int scancode, int action, int mods)
-	{
-		static_cast<Application *>(glfwGetWindowUserPointer(window))->key_callback(window, key, scancode, action, mods);
 	});
 
 	Platform::configureNativeWindow(window);
@@ -140,6 +134,7 @@ void Application::run()
 	while (!glfwWindowShouldClose(window))
 	{
 		FrameMark;
+		gInput.update();
 		glfwPollEvents();
 
 		gDynamicRHI->beginFrame();

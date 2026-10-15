@@ -8,8 +8,6 @@
 #include "RHI/DynamicRHI.h"
 #include "Core/Input.h"
 
-extern Input gInput;
-
 class Application
 {
 public:
@@ -30,7 +28,6 @@ private:
 	virtual void onViewportSizeChanged(int width, int height) {}
 
 	void framebuffer_resize_callback(GLFWwindow *window, int width, int height) { framebuffer_resized = true; }
-	virtual void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {}
 protected:
 	GLFWwindow *window;
 private:

@@ -2,6 +2,7 @@
 #include "SceneRenderer.h"
 #include "Core/Variables.h"
 #include "FrameGraph/GraphViz.h"
+#include "imgui.h"
 #include "Math/BoundSphere.h"
 #include "GlobalBufferCache.h"
 #include "Rendering/Model.h"
@@ -342,7 +343,7 @@ void SceneRenderer::render(Camera *camera, RHITextureRef result_texture)
 	frame_graph.compile();
 	frame_graph.execute(gDynamicRHI->getCmdList());
 
-	if (gInput.isKeyDown(GLFW_KEY_G))
+	if (gInput.isKeyPressed(GLFW_KEY_G) && !ImGui::GetIO().WantTextInput)
 	{
 		GraphViz viz;
 		viz.show("graph.dot", frame_graph);
@@ -441,13 +442,8 @@ void SceneRenderer::update(Camera *camera)
 			Entity light_entity(light_entity_id);
 			auto &light = light_entity.getComponent<LightComponent>();
 
-			glm::vec3 scale, position, skew;
-			glm::vec4 persp;
-			glm::quat rotation;
-			glm::decompose(light_entity.getWorldTransformMatrix(), scale, rotation, position, skew, persp);
-
 			LightGPU light_gpu{};
-			light_gpu.position = glm::vec4(position, 1.0f);
+			light_gpu.position = light_entity.getWorldTransformMatrix()[3];
 			light_gpu.direction = glm::vec4(light_entity.getLocalDirection(glm::vec3(0, 0, -1)), 0.0f);
 			light_gpu.radiance = glm::vec4(light.getPhotometricIntensity(), 1.0f);
 			light_gpu.type = light.getType();

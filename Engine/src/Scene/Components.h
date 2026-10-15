@@ -3,7 +3,7 @@
 #include "Core/Core.h"
 #include "Rendering/Mesh.h"
 #include <glm/gtx/quaternion.hpp>
-#include <glm/gtx/matrix_decompose.hpp>
+#include "Utils/Math.h"
 #include "RHI/RHITexture.h"
 #include "Rendering/Material.h"
 #include "Scene.h"
@@ -31,11 +31,11 @@ public:
 	entt::entity parent = entt::null;
 	eastl::vector<entt::entity> children;
 
+	void setParent(entt::entity new_parent);
+
 	void setLocalTransform(glm::mat4 transform)
 	{
-		glm::vec3 skew;
-		glm::vec4 persp;
-		glm::decompose(transform, local_scale, local_rotation, local_position, skew, persp);
+		Math::decomposeTransform(transform, local_position, local_rotation, local_scale);
 		local_rotation_euler = glm::eulerAngles(local_rotation);
 		Scene::propagate_local_transforms_update(owner);
 	}
@@ -72,10 +72,9 @@ public:
 
 	glm::vec3 getLocalDirection(glm::vec3 direction)
 	{
-		glm::vec3 scale, position, skew;
-		glm::vec4 persp;
+		glm::vec3 position, scale;
 		glm::quat rotation;
-		glm::decompose(world_transform, scale, rotation, position, skew, persp);
+		Math::decomposeTransform(world_transform, position, rotation, scale);
 		return normalize(rotation * direction);
 	}
 
@@ -116,7 +115,7 @@ REFLECT_BEGIN(TransformComponent)
 	REFLECT_FIELD(local_rotation_euler),
 	REFLECT_FIELD(local_scale),
 	REFLECT_FIELD(parent),
-	REFLECT_FIELD(children),
+	REFLECT_FIELD(children).notSerialized(),
 REFLECT_END()
 
 struct MeshRendererComponent

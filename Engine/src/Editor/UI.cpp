@@ -18,9 +18,9 @@ void UI::init()
 	colors[ImGuiCol_FrameBg]                = ImVec4(0.06f, 0.06f, 0.06f, 1.00f);
 	colors[ImGuiCol_FrameBgHovered]         = ImVec4(0.30f, 0.30f, 0.30f, 1.00f);
 	colors[ImGuiCol_FrameBgActive]          = ImVec4(0.16f, 0.16f, 0.16f, 1.00f);
-	colors[ImGuiCol_TitleBg]                = ImVec4(0.08f, 0.08f, 0.08f, 1.00f);
+	colors[ImGuiCol_TitleBg]                = background_dark_color;
 	colors[ImGuiCol_MenuBarBg]              = colors[ImGuiCol_TitleBg];
-	colors[ImGuiCol_TitleBgActive]          = ImVec4(0.08f, 0.08f, 0.08f, 1.00f);
+	colors[ImGuiCol_TitleBgActive]          = background_dark_color;
 	colors[ImGuiCol_CheckMark]              = ImVec4(0.91f, 0.91f, 0.91f, 1.00f);
 	colors[ImGuiCol_SliderGrab]             = ImVec4(0.52f, 0.52f, 0.52f, 1.00f);
 	colors[ImGuiCol_SliderGrabActive]       = ImVec4(0.69f, 0.69f, 0.69f, 1.00f);
@@ -41,10 +41,10 @@ void UI::init()
 	colors[ImGuiCol_TabActive]              = ImVec4(0.27f, 0.27f, 0.27f, 1.00f);
 	colors[ImGuiCol_TabUnfocusedActive]     = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
 	colors[ImGuiCol_DockingPreview]         = ImVec4(0.31f, 0.31f, 0.31f, 0.70f);
-	colors[ImGuiCol_TextSelectedBg]         = ImVec4(0.05f, 0.05f, 0.05f, 1.00f);
+	colors[ImGuiCol_TextSelectedBg]         = selection_color;
 
-	colors[ImGuiCol_WindowBg]               = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
-	colors[ImGuiCol_ChildBg]                = ImVec4(0.08f, 0.08f, 0.08f, 1.00f);
+	colors[ImGuiCol_WindowBg]               = background_color;
+	colors[ImGuiCol_ChildBg]                = background_dark_color;
 
 	style.WindowMenuButtonPosition = ImGuiDir_None;
 	style.WindowPadding = ImVec2(8, 8);
@@ -178,6 +178,11 @@ bool UI::dragFloat3(const char *label, float *value, float min_value, float max_
 	ImGuiSliderFlags flags = logarithmic ? ImGuiSliderFlags_Logarithmic : 0;
 	float speed = calc_drag_speed(min_value, max_value);
 	return property(label, [&] { return ImGui::DragFloat3("##value", value, speed, min_value, max_value, format, flags); }, tooltip);
+}
+
+bool UI::dragFloat3(const char *label, float *value, float speed, const char *tooltip)
+{
+	return property(label, [&] { return ImGui::DragFloat3("##value", value, speed); }, tooltip);
 }
 
 bool UI::dragFloat4(const char *label, float *value, float min_value, float max_value, const char *format, bool logarithmic, const char *tooltip)

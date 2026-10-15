@@ -76,6 +76,16 @@ namespace Math
 		return {halton(index, 2), halton(index, 3)};
 	}
 
+	inline void decomposeTransform(const glm::mat4 &transform, glm::vec3 &position, glm::quat &rotation, glm::vec3 &scale)
+	{
+		glm::mat3 basis(transform);
+		position = glm::vec3(transform[3]);
+		scale = glm::vec3(glm::length(basis[0]), glm::length(basis[1]), glm::length(basis[2]));
+		if (glm::determinant(basis) < 0.0f)
+			scale = -scale;
+		rotation = glm::quat_cast(glm::mat3(basis[0] / scale.x, basis[1] / scale.y, basis[2] / scale.z));
+	}
+
 	// Get how much nits would be WHITE on current "camera" when EV100 = 0
 	inline float getLuminanceMax()
 	{

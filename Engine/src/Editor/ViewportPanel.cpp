@@ -52,13 +52,26 @@ static void drawStatsBar(float delta_time, ImVec2 pos)
 	ImGui::End();
 }
 
-bool ViewportPanel::renderImGui(EditorContext &context, float delta_time)
+bool ViewportPanel::renderImGui(EditorContext &context, float delta_time, bool fullscreen)
 {
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-	ImGui::Begin((eastl::string(ICON_FA_EXPAND) + " Viewport###Viewport").c_str());
+	if (fullscreen)
+	{
+		ImGuiViewport *main_viewport = ImGui::GetMainViewport();
+		ImGui::SetNextWindowPos(main_viewport->Pos);
+		ImGui::SetNextWindowSize(main_viewport->Size);
+		ImGui::SetNextWindowViewport(main_viewport->ID);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
+		ImGui::Begin("Fullscreen Viewport", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
+		ImGui::PopStyleVar(2);
+	} else
+	{
+		ImGui::Begin((eastl::string(ICON_FA_EXPAND) + " Viewport###Viewport").c_str());
+	}
 	ImGui::PopStyleVar();
 
-	bool is_viewport_focused = ImGui::IsWindowFocused();
+	bool is_hovered = ImGui::IsWindowHovered();
 
 	ImVec2 viewport_offset = ImGui::GetCursorPos();
 	ImVec2 viewport_pos = ImGui::GetWindowPos();
@@ -89,41 +102,70 @@ bool ViewportPanel::renderImGui(EditorContext &context, float delta_time)
 	context.editor_camera.setAspect(viewport_size.x / viewport_size.y);
 
 	// ImGuizmo
-	Entity &selected_entity = context.selected_entity;
-	if (selected_entity)
+	Entity selected_entity = context.getSelectedEntity();
+	if (selected_entity && !fullscreen)
 	{
-		auto &transform_component = selected_entity.getTransform();
-
 		ImGuizmo::SetDrawlist();
 		ImGuizmo::SetRect(viewport_pos.x, viewport_pos.y, viewport_size.x, viewport_size.y);
 
-		glm::mat4 proj = context.editor_camera.getProj();
+		Camera &camera = context.editor_camera;
+		glm::mat4 projection = glm::perspective(glm::radians(camera.getFov()), camera.getAspect(), camera.getNear(), camera.getFar());
 
-		glm::mat4 delta_transform;
-		glm::mat4 transform = selected_entity.getWorldTransformMatrix();
+		bool snap = gInput.isKeyDown(GLFW_KEY_LEFT_CONTROL);
+		glm::vec3 snap_values;
+		if (guizmo_tool_type == ImGuizmo::ROTATE)
+			snap_values = glm::vec3(15.0f);
+		else if (guizmo_tool_type == ImGuizmo::SCALE)
+			snap_values = glm::vec3(0.1f);
+		else
+			snap_values = glm::vec3(0.5f);
+
+		eastl::vector<entt::entity> roots;
+		// If parent selected, move only parent
+		for (entt::entity id : context.selected_entities)
+		{
+			Entity parent = Entity(id).getParent();
+			while (parent && !context.isSelected(parent))
+				parent = parent.getParent();
+			if (!parent)
+				roots.push_back(id);
+		}
+
+		bool was_using = ImGuizmo::IsUsing();
+		if (!was_using)
+		{
+			// Use center as pivot point
+			glm::vec3 center = glm::vec3(0.0f);
+			for (entt::entity id : roots)
+				center += glm::vec3(Entity(id).getWorldTransformMatrix()[3]);
+			center /= (float)roots.size();
+
+			glm::vec3 position;
+			glm::vec3 scale;
+			glm::quat rotation;
+			Math::decomposeTransform(selected_entity.getWorldTransformMatrix(), position, rotation, scale);
+			guizmo_pivot = glm::translate(glm::mat4(1.0f), center) * glm::toMat4(rotation);
+		}
+		glm::mat4 old_pivot = guizmo_pivot;
 
 		ImGuizmo::SetOrthographic(false);
-		if (ImGuizmo::Manipulate(glm::value_ptr(context.editor_camera.getView()), glm::value_ptr(proj), guizmo_tool_type, ImGuizmo::WORLD, glm::value_ptr(transform), glm::value_ptr(delta_transform)))
+		ImGuizmo::MODE mode = guizmo_tool_type == ImGuizmo::SCALE ? ImGuizmo::LOCAL : ImGuizmo::WORLD;
+		bool changed = ImGuizmo::Manipulate(glm::value_ptr(camera.getView()), glm::value_ptr(projection), guizmo_tool_type, mode, glm::value_ptr(guizmo_pivot), nullptr, snap ? glm::value_ptr(snap_values) : nullptr);
+
+		if (!was_using && ImGuizmo::IsUsing() && gInput.isKeyDown(GLFW_KEY_LEFT_SHIFT))
 		{
-			//
-			glm::vec3 dposition, drotation, dscale;
-			ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(delta_transform), glm::value_ptr(dposition), glm::value_ptr(drotation), glm::value_ptr(dscale));
+			for (entt::entity &id : roots)
+				id = Scene::getCurrentScene()->duplicateEntity(id);
+			context.selected_entities = roots;
+		}
 
-			glm::mat3 new_transform;
-			glm::vec3 position, rotation, scale;
-			ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(new_transform), glm::value_ptr(position), glm::value_ptr(rotation), glm::value_ptr(scale));
-
-			//ImGuizmo::RecomposeMatrixFromComponents(glm::value_ptr(position), glm::value_ptr(rotation), glm::value_ptr(scale), glm::value_ptr(transform));
-			//
-
-			if (transform_component.parent != entt::null)
+		if (changed)
+		{
+			glm::mat4 delta = guizmo_pivot * glm::inverse(old_pivot);
+			for (entt::entity id : roots)
 			{
-				transform_component.setWorldTransform(transform);
-				//transform_component.setLocalTransform(inverse(selected_entity.getParent().getTransform().getLocalTransform()) * transform);
-			} else
-			{
-				transform_component.setWorldTransform(transform);
-				//transform_component.setLocalTransform(transform);
+				TransformComponent &transform_component = Entity(id).getTransform();
+				transform_component.setWorldTransform(delta * transform_component.getWorldTransform());
 			}
 		}
 	}
@@ -146,17 +188,21 @@ bool ViewportPanel::renderImGui(EditorContext &context, float delta_time)
 		ImGui::EndDragDropTarget();
 	}
 
-	drawStatsBar(delta_time, viewport_pos);
+	if (!fullscreen)
+		drawStatsBar(delta_time, viewport_pos);
 	ImGui::End();
-	return is_viewport_focused;
+	return is_hovered;
 }
 
 void ViewportPanel::update()
 {
-	if (gInput.isKeyDown(GLFW_KEY_R))
+	if (ImGui::GetIO().WantTextInput)
+		return;
+
+	if (gInput.isKeyPressed(GLFW_KEY_R))
 		guizmo_tool_type = ImGuizmo::ROTATE;
-	if (gInput.isKeyDown(GLFW_KEY_T))
+	if (gInput.isKeyPressed(GLFW_KEY_T))
 		guizmo_tool_type = ImGuizmo::TRANSLATE;
-	if (gInput.isKeyDown(GLFW_KEY_Y))
+	if (gInput.isKeyPressed(GLFW_KEY_Y))
 		guizmo_tool_type = ImGuizmo::SCALE;
 }
