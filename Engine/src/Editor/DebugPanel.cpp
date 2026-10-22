@@ -118,7 +118,7 @@ void DebugPanel::renderImGui(EditorContext &context)
 		UI::convar(render_ddgi_visualize.getDescription());
 		if (render_ddgi_visualize)
 		{
-			const char *items[] = {"Irradiance", "Distance", "State", "State Not Disabled", "Cascades"};
+			const char *items[] = {"Irradiance", "Distance", "State", "State Not Disabled", "Cascades", "Relocation"};
 			int mode = render_ddgi_visualize_mode;
 			if (UI::combo("DDGI Visualize Mode", &mode, items, IM_ARRAYSIZE(items)))
 				render_ddgi_visualize_mode = mode;

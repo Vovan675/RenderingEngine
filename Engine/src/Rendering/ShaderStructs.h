@@ -185,8 +185,6 @@ struct DDGIVolumeGPU
 	glm::vec3 origin;
 	glm::ivec4 size;
 	glm::vec3 spacing;
-	glm::vec3 random_vector;
-	float random_angle;
 	float use_relocation;
 	float use_classification;
 	uint32_t cascades_count;

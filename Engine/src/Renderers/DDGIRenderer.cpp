@@ -1,7 +1,6 @@
 #include "pch.h"
 #include "DDGIRenderer.h"
 #include "Rendering/Model.h"
-#include <random>
 #include "Utils/Math.h"
 #include "Core/Variables.h"
 #include "Rendering/UploadManager.h"
@@ -22,6 +21,7 @@ struct ProbePassConstants
 	uint32_t output_atlas_tex_id;
 	uint32_t ray_data_buffer_id;
 	uint32_t probes_to_update_buffer_id;
+	uint32_t probes_to_update_count;
 };
 
 DDGIRenderer::DDGIRenderer()
@@ -45,27 +45,12 @@ void DDGIRenderer::update()
 	volume.use_relocation = ddgi.use_relocation;
 	volume.use_classification = ddgi.use_classification;
 
-	// Generate random rotation for ray directions
-	static std::default_random_engine generator(time(0));
-	static std::uniform_real_distribution<float> dist(0.0f, 1.0f);
-	
-	glm::vec3 random_vector(
-		2.0f * dist(generator) - 1.0f,
-		2.0f * dist(generator) - 1.0f,
-		2.0f * dist(generator) - 1.0f
-	);
-	random_vector = glm::normalize(random_vector);
-	float random_angle = dist(generator) * 2.0f * glm::pi<float>();
-
-	volume.random_vector = random_vector;
-	volume.random_angle = random_angle;
-
 	glm::vec3 center = volume.origin;
 	for (int i = 0; i < volume.cascades_count; i++)
 	{
-		volume.cascades[i].spacing = glm::vec4(volume.spacing * float(i + 1), 0.0f);
+		volume.cascades[i].spacing = glm::vec4(volume.spacing * float(1 << i), 0.0f);
 
-		glm::vec3 volume_size = glm::vec3(glm::vec4(volume.size) * volume.cascades[i].spacing);
+		glm::vec3 volume_size = (glm::vec3(volume.size) - 1.0f) * glm::vec3(volume.cascades[i].spacing);
 		volume.cascades[i].min = glm::vec4(center - volume_size / 2.0f, 0.0f);
 	}
 
@@ -139,20 +124,6 @@ void DDGIRenderer::addVisualizePass(FrameGraph &fg)
 	});
 }
 
-eastl::vector<eastl::pair<const char *, const char *>> DDGIRenderer::calculateDefines(eastl::vector<eastl::pair<const char *, const char *>> additional)
-{
-	eastl::vector<eastl::pair<const char *, const char *>> defines;
-	for (auto &define : additional)
-		defines.emplace_back(define);
-
-	if (GFXOPTIONS(ddgi).use_fixed_rays)
-		defines.push_back({"USE_FIXED_RAYS", "1"});
-
-	if (GFXOPTIONS(ddgi).trace_random_direction)
-		defines.push_back({"TRACE_RANDOM_DIRECTION", "1"});
-	return defines;
-}
-
 void DDGIRenderer::update_probes()
 {
 	probes_to_update.clear();
@@ -210,7 +181,7 @@ void DDGIRenderer::addPreparePass(FrameGraph &fg)
 
 		TextureDescription metadata_desc;
 		metadata_desc.width = volume.size.x * layers;
-		metadata_desc.height = volume.size.z;
+		metadata_desc.height = volume.size.z * 2; // Rows: current offset + state, candidate offset + lighting scale
 		metadata_desc.array_levels = cascades_count;
 		metadata_desc.format = FORMAT_R16G16B16A16_SFLOAT;
 		metadata_desc.usage_flags = TEXTURE_USAGE_STORAGE;
@@ -261,7 +232,7 @@ void DDGIRenderer::addTraceRaysPass(FrameGraph &fg, Ref<RayTracingScene> rt_scen
 	fg.addCallbackPass("DDGI Trace Rays Pass",
 	[&](RenderPassBuilder &builder)
 	{
-		builder.createBuffer(GFXRID(DDGIRayData), sizeof(glm::vec4), volume.rays_per_probe * volume.getProbesCount(), BufferUsage::SHADER_READ_BUFFER | BufferUsage::SHADER_WRITE_BUFFER);
+		builder.createBuffer(GFXRID(DDGIRayData), sizeof(glm::vec4), volume.rays_per_probe * probes_to_update.size(), BufferUsage::SHADER_READ_BUFFER | BufferUsage::SHADER_WRITE_BUFFER);
 		builder.writeBuffer(GFXRID(DDGIRayData));
 		builder.readBuffer(GFXRID(DDGIProbesToUpdate));
 		readAtlases(builder);
@@ -269,7 +240,7 @@ void DDGIRenderer::addTraceRaysPass(FrameGraph &fg, Ref<RayTracingScene> rt_scen
 	},
 	[=](const RenderPassResources &resources, RHICommandList *cmd_list)
 	{
-		gGlobalPipeline->setupRayTracing(L"shaders/ddgi/ddgi_trace_rays.hlsl", calculateDefines());
+		gGlobalPipeline->setupComputePipeline(gDynamicRHI->createShader(L"shaders/ddgi/ddgi_trace_rays.hlsl", COMPUTE_SHADER, "CS_TraceRays"));
 		gGlobalPipeline->flushAndBind(cmd_list);
 
 		struct Constants
@@ -281,10 +252,10 @@ void DDGIRenderer::addTraceRaysPass(FrameGraph &fg, Ref<RayTracingScene> rt_scen
 		constants.output_buffer_id = resources.getReadWriteBuffer(GFXRID(DDGIRayData));
 		constants.environment_tex_id = GFXOPTIONS(sky).enabled ? resources.getReadTexture(GFXRID(Sky)) : 0;
 		constants.probes_to_update_buffer_id = resources.getReadBuffer(GFXRID(DDGIProbesToUpdate));
-		gDynamicRHI->setConstantBufferData(3, &constants, sizeof(constants));
+		gDynamicRHI->setConstantBufferData(1, &constants, sizeof(constants));
 		setAtlasConstants(resources);
 
-		cmd_list->dispatchRays(volume.rays_per_probe, probes_to_update.size(), 1);
+		cmd_list->dispatch(ceil(volume.rays_per_probe / 64.0f), probes_to_update.size(), 1);
 	});
 }
 
@@ -294,22 +265,27 @@ void DDGIRenderer::addUpdatePass(FrameGraph & fg)
 	[&](RenderPassBuilder &builder)
 	{
 		builder.writeUAVTexture(GFXRID(DDGIIrradiance));
+		builder.writeUAVTexture(GFXRID(DDGIMetadata));
 		builder.readBuffer(GFXRID(DDGIRayData));
 		builder.readBuffer(GFXRID(DDGIProbesToUpdate));
-		if (GFXOPTIONS(ddgi).use_relocation || GFXOPTIONS(ddgi).use_classification)
-			builder.readTexture(GFXRID(DDGIMetadata));
 	},
 	[=](const RenderPassResources &resources, RHICommandList *cmd_list)
 	{
-		gGlobalPipeline->setupComputePipeline(gDynamicRHI->createShader(L"shaders/ddgi/ddgi_update_probe.hlsl", COMPUTE_SHADER, "CSMain", calculateDefines({{"NUM_TEXELS", "8"}, {"IRRADIANCE", "1"}})));
+		gGlobalPipeline->setupComputePipeline(gDynamicRHI->createShader(L"shaders/ddgi/ddgi_update_probe.hlsl", COMPUTE_SHADER, "CSMain", {{"NUM_TEXELS", "8"}, {"IRRADIANCE", "1"}}));
 		gGlobalPipeline->flushAndBind(cmd_list);
 
-		ProbePassConstants constants;
+		struct
+		{
+			uint32_t output_atlas_tex_id;
+			uint32_t ray_data_buffer_id;
+			uint32_t probes_to_update_buffer_id;
+			uint32_t metadata_atlas_tex_id;
+		} constants;
 		constants.output_atlas_tex_id = resources.getReadWriteTexture(GFXRID(DDGIIrradiance));
 		constants.ray_data_buffer_id = resources.getReadBuffer(GFXRID(DDGIRayData));
 		constants.probes_to_update_buffer_id = resources.getReadBuffer(GFXRID(DDGIProbesToUpdate));
+		constants.metadata_atlas_tex_id = resources.getReadWriteTexture(GFXRID(DDGIMetadata));
 		gDynamicRHI->setConstantBufferData(1, &constants, sizeof(constants));
-		setAtlasConstants(resources);
 
 		cmd_list->dispatch(probes_to_update.size(), 1, 1);
 	});
@@ -320,20 +296,18 @@ void DDGIRenderer::addUpdatePass(FrameGraph & fg)
 		builder.writeUAVTexture(GFXRID(DDGIDistance));
 		builder.readBuffer(GFXRID(DDGIRayData));
 		builder.readBuffer(GFXRID(DDGIProbesToUpdate));
-		if (GFXOPTIONS(ddgi).use_relocation || GFXOPTIONS(ddgi).use_classification)
-			builder.readTexture(GFXRID(DDGIMetadata));
 	},
 	[=](const RenderPassResources &resources, RHICommandList *cmd_list)
 	{
-		gGlobalPipeline->setupComputePipeline(gDynamicRHI->createShader(L"shaders/ddgi/ddgi_update_probe.hlsl", COMPUTE_SHADER, "CSMain", calculateDefines({{"NUM_TEXELS", "12"}})));
+		gGlobalPipeline->setupComputePipeline(gDynamicRHI->createShader(L"shaders/ddgi/ddgi_update_probe.hlsl", COMPUTE_SHADER, "CSMain", {{"NUM_TEXELS", "12"}}));
 		gGlobalPipeline->flushAndBind(cmd_list);
 
 		ProbePassConstants constants;
 		constants.output_atlas_tex_id = resources.getReadWriteTexture(GFXRID(DDGIDistance));
 		constants.ray_data_buffer_id = resources.getReadBuffer(GFXRID(DDGIRayData));
 		constants.probes_to_update_buffer_id = resources.getReadBuffer(GFXRID(DDGIProbesToUpdate));
+		constants.probes_to_update_count = probes_to_update.size();
 		gDynamicRHI->setConstantBufferData(1, &constants, sizeof(constants));
-		setAtlasConstants(resources);
 
 		cmd_list->dispatch(probes_to_update.size(), 1, 1);
 	});
@@ -350,13 +324,14 @@ void DDGIRenderer::addRelocationPass(FrameGraph & fg)
 	},
 	[=](const RenderPassResources &resources, RHICommandList *cmd_list)
 	{
-		gGlobalPipeline->setupComputePipeline(gDynamicRHI->createShader(L"shaders/ddgi/ddgi_relocation.hlsl", COMPUTE_SHADER, "CS_Relocate", calculateDefines()));
+		gGlobalPipeline->setupComputePipeline(gDynamicRHI->createShader(L"shaders/ddgi/ddgi_relocation.hlsl", COMPUTE_SHADER, "CS_Relocate"));
 		gGlobalPipeline->flushAndBind(cmd_list);
 
 		ProbePassConstants constants;
 		constants.output_atlas_tex_id = resources.getReadWriteTexture(GFXRID(DDGIMetadata));
 		constants.ray_data_buffer_id = resources.getReadBuffer(GFXRID(DDGIRayData));
 		constants.probes_to_update_buffer_id = resources.getReadBuffer(GFXRID(DDGIProbesToUpdate));
+		constants.probes_to_update_count = probes_to_update.size();
 		gDynamicRHI->setConstantBufferData(1, &constants, sizeof(constants));
 
 		uint32_t num_groups = ceil(probes_to_update.size() / 32.0f);
@@ -375,15 +350,15 @@ void DDGIRenderer::addClassificationPass(FrameGraph &fg)
 	},
 	[=](const RenderPassResources &resources, RHICommandList *cmd_list)
 	{
-		gGlobalPipeline->setupComputePipeline(gDynamicRHI->createShader(L"shaders/ddgi/ddgi_classification.hlsl", COMPUTE_SHADER, "CS_Classification", calculateDefines()));
+		gGlobalPipeline->setupComputePipeline(gDynamicRHI->createShader(L"shaders/ddgi/ddgi_classification.hlsl", COMPUTE_SHADER, "CS_Classification"));
 		gGlobalPipeline->flushAndBind(cmd_list);
 
 		ProbePassConstants constants;
 		constants.output_atlas_tex_id = resources.getReadWriteTexture(GFXRID(DDGIMetadata));
 		constants.ray_data_buffer_id = resources.getReadBuffer(GFXRID(DDGIRayData));
 		constants.probes_to_update_buffer_id = resources.getReadBuffer(GFXRID(DDGIProbesToUpdate));
+		constants.probes_to_update_count = probes_to_update.size();
 		gDynamicRHI->setConstantBufferData(1, &constants, sizeof(constants));
-		setAtlasConstants(resources);
 
 		uint32_t num_groups = ceil(probes_to_update.size() / 32.0f);
 		cmd_list->dispatch(num_groups, 1, 1);

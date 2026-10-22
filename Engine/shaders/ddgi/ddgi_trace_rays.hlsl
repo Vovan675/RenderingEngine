@@ -6,20 +6,11 @@
 // Always trace infinite rays, as last cascade
 #define USE_INFINITE_RAYS 1
 
-cbuffer Constants : register(b3)
+cbuffer Constants : register(b1)
 {
 	uint output_buffer_id;
 	uint environment_tex_id;
 	uint probes_to_update_buffer_id;
-};
-
-struct RayPayload {
-	bool hit;
-	float depth;
-	float2 bary;
-	uint instance_id;
-	uint primitive_id;
-	uint hit_kind;
 };
 
 bool TraceShadowRay(RaytracingAccelerationStructure tlas, float3 origin, float3 direction, float max_distance)
@@ -29,32 +20,33 @@ bool TraceShadowRay(RaytracingAccelerationStructure tlas, float3 origin, float3 
 	shadow_ray.Direction = direction;
 	shadow_ray.TMin = 0.0001;
 	shadow_ray.TMax = max_distance;
-	
-	RayPayload shadow_payload;
-	shadow_payload.hit = false;
-	
-	TraceRay(tlas, RAY_FLAG_NONE, 0xff, 0, 0, 0, shadow_ray, shadow_payload);
-	
-	return shadow_payload.hit;
+
+	RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> ray_query;
+	ray_query.TraceRayInline(tlas, RAY_FLAG_NONE, 0xff, shadow_ray);
+	ray_query.Proceed();
+
+	return ray_query.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
 }
 
 // 400 rays traced, and info saved as ray_data
 // Then it will be used to generate distance/irradiance atlases
 
-[shader("raygeneration")]
-void RayGen()
+[numthreads(64, 1, 1)]
+void CS_TraceRays(uint3 dispatch_thread_id : SV_DispatchThreadID)
 {
-	uint ray_index = DispatchRaysIndex().x;
+	uint ray_index = dispatch_thread_id.x;
 
 	DDGIVolume volume = ddgi_volume;
+	if (ray_index >= volume.rays_per_probe)
+		return;
 
 	StructuredBuffer<uint> probes_to_update = ResourceDescriptorHeap[probes_to_update_buffer_id];
-	uint probe_id = probes_to_update[DispatchRaysIndex().y];
+	uint probe_id = probes_to_update[dispatch_thread_id.y];
 
 	uint cascade_id = GetProbeCascade(volume, probe_id);
 	DDGICascade cascade = volume.cascades[cascade_id];
 	uint3 probe_coords = GetProbeGridCoords(volume, probe_id);
-	float3 probe_position = GetProbeWorldPosition(volume, probe_coords, cascade_id);
+	float3 probe_position = GetProbeTracePosition(volume, probe_coords, cascade_id);
 	float3 ray_direction = GetProbeRayDirection(ray_index, volume);
 
 	RaytracingAccelerationStructure tlas = ResourceDescriptorHeap[tlas_id];
@@ -62,6 +54,7 @@ void RayGen()
 	float ray_distance = 10000.0f;
 
 	#if USE_INFINITE_RAYS == 0
+		// Need radiance cache of the next cascade on miss for real use
 		bool is_not_last_cascade = cascade_id < (volume.cascades_count - 1);
 		if (is_not_last_cascade)
 		{
@@ -76,16 +69,15 @@ void RayGen()
 	ray.TMin = 0.0;
 	ray.TMax = ray_distance;
 
-	RayPayload payload;
-	payload.hit = false;
-	
-	TraceRay(tlas, RAY_FLAG_NONE, 0xff, 0, 0, 0, ray, payload);
-	
-	uint ray_data_index = GetRayDataIndex(probe_id, ray_index, volume);
+	RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> ray_query;
+	ray_query.TraceRayInline(tlas, RAY_FLAG_NONE, 0xff, ray);
+	ray_query.Proceed();
+
+	uint ray_data_index = GetRayDataIndex(dispatch_thread_id.y, ray_index, volume);
 
 	RWStructuredBuffer<float4> ray_data = ResourceDescriptorHeap[output_buffer_id];
 
-	if (!payload.hit)
+	if (ray_query.CommittedStatus() != COMMITTED_TRIANGLE_HIT)
 	{
 		#if USE_INFINITE_RAYS == 0
 			if (is_not_last_cascade)
@@ -103,29 +95,32 @@ void RayGen()
 				TextureCube environment_tex = ResourceDescriptorHeap[environment_tex_id];
 				environment = environment_tex.SampleLevel(linear_clamp_sampler, ray_direction, 0).rgb * sky_intensity;
 			}
-			ray_data[ray_data_index] = float4(environment, 1e27f);
+			ray_data[ray_data_index] = float4(environment, MISS_DISTANCE);
 		}
 		return;
 	}
 
-	if (payload.hit_kind == HIT_KIND_TRIANGLE_BACK_FACE)
+	float hit_distance = ray_query.CommittedRayT();
+	if (!ray_query.CommittedTriangleFrontFace())
 	{
 		// Mark as back face and shorten the ray to decrease influence during irradiance sampling
-		ray_data[ray_data_index] = float4(0, 0, 0, -payload.depth * BACKFACE_DISTANCE_SCALE);
+		ray_data[ray_data_index] = float4(0, 0, 0, -hit_distance * BACKFACE_DISTANCE_SCALE);
 		return;
 	}
 
-	Instance instance = getInstance(payload.instance_id);
+	Instance instance = getInstance(ray_query.CommittedInstanceID());
 	Material material = getMaterial(instance.material_id);
 
 	Mesh mesh = getMesh(instance.mesh_id);
-	VertexData vertex = GetVertexData(mesh, payload.primitive_id, payload.bary);
+	VertexData vertex = GetVertexData(mesh, ray_query.CommittedPrimitiveIndex(), ray_query.CommittedTriangleBarycentrics());
 	float3 albedo = (material.albedo_tex_id > 0) ? SampleTextureLevel(material.albedo_tex_id, vertex.uv, 0).rgb : material.albedo.rgb;
-	
+	float metalness = (material.metalness_tex_id > 0) ? SampleTextureLevel(material.metalness_tex_id, vertex.uv, 0).b : material.shading.r;
+	float3 diffuse_color = albedo * (1.0f - metalness);
+
 	float3 position = mul(instance.world_transform, float4(vertex.position, 1.0)).xyz;
 	float3 normal = transformNormalToWorld(vertex.normal, instance.iworld_transform);
 	
-	float3 diffuse = LambertDiffuse(albedo);
+	float3 diffuse = LambertDiffuse(diffuse_color);
 	float3 shadow_origin = position + normal * 0.01;
 
 	float3 radiance = 0;
@@ -148,26 +143,20 @@ void RayGen()
 	float volume_weight = GetVolumeWeight(position, volume);
 	if (volume_weight > 0.0f)
 	{
-		float3 surface_bias = GetSurfaceBias(normal, ray.Origin, position, volume, cascade_id);
-		float3 irradiance = SampleIrradiance(position, normal, surface_bias, volume, cascade_id);
-		radiance += (min(albedo, 0.9f) / PI) * irradiance * volume_weight;
+		// Dithered cascade transition (for not sampling probes twice)
+		uint bounce_cascade_id;
+		float cascade_weight = GetCascadeWeight(position, volume, bounce_cascade_id);
+		if (hash13(float3(ray_index, probe_id, 0)) > cascade_weight)
+			bounce_cascade_id++;
+
+		// Bias just towards probe center. Up to 0.1 of spacing, not more than half of depth
+		float3 cascade_spacing = volume.cascades[bounce_cascade_id].spacing.xyz;
+		float spacing = min(cascade_spacing.x, min(cascade_spacing.y, cascade_spacing.z));
+		float3 surface_bias = -ray.Direction * min(0.1f * spacing, hit_distance * 0.5f);
+		
+		float3 irradiance = SampleIrradiance(position, normal, surface_bias, volume, bounce_cascade_id);
+		radiance += (min(diffuse_color, 0.9f) / PI) * irradiance * volume_weight;
 	}
 
-	ray_data[ray_data_index] = float4(radiance, payload.depth);
-}
-
-[shader("miss")]
-void Miss(inout RayPayload payload) {
-	payload.hit = false;
-	payload.depth = 1000;
-}
-
-[shader("closesthit")]
-void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attribs) {
-	payload.hit = true;
-	payload.depth = RayTCurrent();
-	payload.bary = attribs.barycentrics;
-	payload.instance_id = InstanceID();
-	payload.primitive_id = PrimitiveIndex();
-	payload.hit_kind = HitKind();
+	ray_data[ray_data_index] = float4(radiance, hit_distance);
 }

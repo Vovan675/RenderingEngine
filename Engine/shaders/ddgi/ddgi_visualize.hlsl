@@ -33,8 +33,6 @@ VertexOutput VSMain(VertexInput IN) {
 	OUT.direction = IN.position;
 	OUT.probe_id = IN.instance_id;
 	OUT.probe_cascade = cascade;
-
-	//if (cascade != 0) OUT.position = 0;
 	return OUT;
 }
 
@@ -43,17 +41,11 @@ float4 PSMain(VertexOutput IN) : SV_TARGET {
 	Texture2DArray irradiance_atlas = ResourceDescriptorHeap[ddgi_irradiance_atlas_tex_id];
 	uint3 probe_coords = GetProbeGridCoords(volume, IN.probe_id);
 
-	//#define SHOW_CASCADES
-	#ifdef SHOW_CASCADES
-		
-	#endif
-	//return float4(probe_coords / 32.0, 1.0);
-
 	if (mode == 0)
 	{
 		float2 uv = GetProbeUV(volume, probe_coords, normalize(IN.direction), IRRADIANCE_TEXELS);
-		float4 encoded_irradiance = irradiance_atlas.Sample(linear_clamp_sampler, float3(uv, IN.probe_cascade));
-		float3 irradiance = pow(encoded_irradiance.rgb, IRRADIANCE_ENCODE_GAMMA) * PI2 / PI;
+		float3 encoded_irradiance = irradiance_atlas.Sample(linear_clamp_sampler, float3(uv, IN.probe_cascade)).rgb;
+		float3 irradiance = encoded_irradiance * GetProbeLightingScale(volume, probe_coords, IN.probe_cascade) * PI2 / PI;
 		return LinearToSRGB(float4(irradiance * camera_exposure, 1.0));
 	} else if (mode == 1)
 	{
@@ -87,6 +79,11 @@ float4 PSMain(VertexOutput IN) : SV_TARGET {
 			default: cascade_color = float3(0, 1, 1); break;
 		}
 		return float4(cascade_color, 1.0);
+	} else if (mode == 5)
+	{
+		float3 offset = GetProbeWorldPosition(volume, probe_coords, IN.probe_cascade) - GetProbeWorldBasePosition(volume, probe_coords, IN.probe_cascade);
+		float offset_length = length(offset / volume.cascades[IN.probe_cascade].spacing.xyz);
+		return float4(lerp(float3(0, 1, 0), float3(1, 0, 0), saturate(offset_length / RELOCATION_MAX_OFFSET)), 1.0);
 	}
 	return float4(1.0, 1.0, 1.0, 1.0);
 }

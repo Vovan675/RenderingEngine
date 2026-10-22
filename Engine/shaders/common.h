@@ -85,9 +85,6 @@ struct DDGIVolume
 	int4 size; // cascade size (xyz), probes in cascade (w)
 	float3 spacing;
 	float pad2;
-	float3 random_vector;
-	float pad3;
-	float random_angle;
 	float use_relocation;
 	float use_classification;
 	uint cascades_count;

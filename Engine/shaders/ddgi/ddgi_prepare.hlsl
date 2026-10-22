@@ -24,7 +24,10 @@ void CS_ResetMetadata(uint3 dispatch_thread_id : SV_DispatchThreadID)
 
 	float4 metadata = metadata_atlas[texel_coord];
 	if (reset_relocation)
+	{
 		metadata.xyz = float3(0, 0, 0);
+		metadata_atlas[uint3(GetProbeCandidateTexelCoords(volume, probe_coord), cascade_id)].xyz = float3(0, 0, 0);
+	}
 	if (reset_classification)
 		metadata.w = STATE_ENABLED;
 	metadata_atlas[texel_coord] = metadata;

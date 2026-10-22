@@ -6,43 +6,24 @@ cbuffer DDGIAtlases : register(b2)
 };
 
 #define DISTANCE_TEXELS 12
-#define DISTANCE_INTERIOR_TEXELS 10
-
 #define IRRADIANCE_TEXELS 8
-#define IRRADIANCE_INTERIOR_TEXELS 6
 
-#define IRRADIANCE_ENCODE_GAMMA 1.5
+#define MISS_DISTANCE 1e27f
 #define BACKFACE_DISTANCE_SCALE 0.2
+#define BACKFACE_THRESHOLD 0.25f
 
-#define SRGB_BLENDING 1
-
-// Fixed rays are used for probe relocation/classification, for avoiding random and unstable results.
-// These rays are NOT used in blending
-//#define USE_FIXED_RAYS 1
-#define NUM_FIXED_RAYS 32
+#define SURFACE_BIAS_NORMAL 0.075f
+#define SURFACE_BIAS_CAMERA 0.15f
+#define RELOCATION_MIN_DISTANCE 0.25f
+#define RELOCATION_MAX_OFFSET 0.45f
 
 // States for probes
-#define STATE_ENABLED 0 
+#define STATE_ENABLED 0
 #define STATE_DISABLED 1
 
-#define BACKFACE_THRESHOLD_UPDATE 0.15f
-#define BACKFACE_THRESHOLD_CLASSIFICATION 0.25f
-#define DEFAULT_BLEND_FACTOR 0.97f
-#define DISTANCE_WEIGHT_POWER 25.0f
-
-uint GetProbeCount(DDGIVolume volume)
+uint GetRayDataIndex(uint update_index, uint ray_index, DDGIVolume volume)
 {
-	return uint(volume.size.x) * uint(volume.size.y) * uint(volume.size.z) * uint(volume.cascades_count);
-}
-
-uint GetProbesPerLayer(DDGIVolume volume)
-{
-	return uint(volume.size.x) * uint(volume.size.z);
-}
-
-uint GetRayDataIndex(uint probe_id, uint ray_index, DDGIVolume volume)
-{
-	return probe_id * volume.rays_per_probe + ray_index;
+	return update_index * volume.rays_per_probe + ray_index;
 }
 
 uint GetProbeCascade(DDGIVolume volume, uint probe_id)
@@ -61,16 +42,15 @@ uint3 GetProbeGridCoords(DDGIVolume volume, uint probe_id)
 	return coord;
 }
 
-uint GetProbeIndex(DDGIVolume volume, uint3 coords, uint cascade)
-{
-	uint cascade_offset = volume.size.w * cascade;
-	return coords.x + coords.z * uint(volume.size.x) + coords.y * GetProbesPerLayer(volume) + cascade_offset;
-}
-
 uint2 GetProbeStartTexelCoords(DDGIVolume volume, uint3 probe_coords)
 {
 	float layer_offset = volume.size.x * probe_coords.y;
 	return uint2(probe_coords.x + layer_offset, probe_coords.z);
+}
+
+uint2 GetProbeCandidateTexelCoords(DDGIVolume volume, uint3 probe_coords)
+{
+	return GetProbeStartTexelCoords(volume, probe_coords) + uint2(0, volume.size.z);
 }
 
 uint3 GetProbeTexelCoords(DDGIVolume volume, uint3 probe_coords, uint cascade, uint num_texels, uint2 texel_offset)
@@ -93,9 +73,9 @@ float3 GetProbeRelocationOffset(DDGIVolume volume, uint3 probe_coords, uint casc
 }
 
 // Returns world space offset
-float3 GetProbeRelocationOffset(DDGIVolume volume, uint3 probe_coords, uint cascade, RWTexture2DArray<float4> metadata_atlas)
+float3 GetProbeCandidateOffset(DDGIVolume volume, uint3 probe_coords, uint cascade, RWTexture2DArray<float4> metadata_atlas)
 {
-	uint2 texel_coord = GetProbeStartTexelCoords(volume, probe_coords);
+	uint2 texel_coord = GetProbeCandidateTexelCoords(volume, probe_coords);
 	DDGICascade casc = volume.cascades[cascade];
 	return metadata_atlas[uint3(texel_coord, cascade)].xyz * casc.spacing.xyz;
 }
@@ -116,6 +96,13 @@ bool IsProbeDisabled(DDGIVolume volume, uint3 probe_coords, uint cascade)
 	return state == STATE_DISABLED;
 }
 
+float GetProbeLightingScale(DDGIVolume volume, uint3 probe_coords, uint cascade)
+{
+	uint2 texel_coord = GetProbeCandidateTexelCoords(volume, probe_coords);
+	Texture2DArray<float4> metadata_atlas = ResourceDescriptorHeap[ddgi_metadata_atlas_tex_id];
+	return metadata_atlas.Load(uint4(texel_coord, cascade, 0)).w;
+}
+
 float3 GetProbeWorldPosition(DDGIVolume volume, uint3 probe_coords, uint cascade)
 {
 	float3 base_position = GetProbeWorldBasePosition(volume, probe_coords, cascade);
@@ -127,12 +114,25 @@ float3 GetProbeWorldPosition(DDGIVolume volume, uint3 probe_coords, uint cascade
 	return base_position;
 }
 
-float3 DecodeNormalOctahedron(float2 f)
+float3 GetProbeCandidateOffset(DDGIVolume volume, uint3 probe_coords, uint cascade)
 {
-	float3 n = float3(f.x, f.y, 1.0 - abs(f.x) - abs(f.y));
-	float t = saturate(-n.z);
-	n.xy += lerp(t, -t, n.xy >= 0.0);
-	return normalize(n);
+	uint2 texel_coord = GetProbeCandidateTexelCoords(volume, probe_coords);
+	Texture2DArray<float4> metadata_atlas = ResourceDescriptorHeap[ddgi_metadata_atlas_tex_id];
+	DDGICascade casc = volume.cascades[cascade];
+	return metadata_atlas.Load(uint4(texel_coord.xy, cascade, 0)).xyz * casc.spacing.xyz;
+}
+
+// Relocation writes the new offset inside candidate.
+// But sampling uses the current (old) offset the atlases were traced from
+float3 GetProbeTracePosition(DDGIVolume volume, uint3 probe_coords, uint cascade)
+{
+	float3 base_position = GetProbeWorldBasePosition(volume, probe_coords, cascade);
+	if (volume.use_relocation)
+	{
+		float3 candidate_offset = GetProbeCandidateOffset(volume, probe_coords, cascade);
+		base_position += candidate_offset;
+	}
+	return base_position;
 }
 
 float2 GetNormalizedOctahedralCoordinates(int2 tex_coords, int num_texels)
@@ -198,22 +198,33 @@ float3 GetProbeRayDirection(uint ray_index, DDGIVolume volume)
 	return normalize(texel_direction);
 }
 
+uint GetProbeRayIndex(uint2 ray_texel)
+{
+	return ray_texel.y * TRACE_TEXELS + ray_texel.x;
+}
+
+uint GetProbeRayIndex(float3 direction)
+{
+	uint2 ray_texel = uint2(min((GetOctahedralCoordinates(direction) * 0.5f + 0.5f) * TRACE_TEXELS, TRACE_TEXELS - 1));
+	return GetProbeRayIndex(ray_texel);
+}
+
+float3 GetCascadeCenter(DDGIVolume volume, DDGICascade cascade)
+{
+	return cascade.min.xyz + (volume.size.xyz - 1) * cascade.spacing.xyz * 0.5f;
+}
+
+float3 GetCascadeExtent(DDGIVolume volume, DDGICascade cascade)
+{
+	return (volume.size.xyz - 1) * 0.5f * cascade.spacing.xyz;
+}
+
 float GetVolumeWeight(float3 world_position, DDGIVolume volume)
 {
 	DDGICascade last_cascade = volume.cascades[volume.cascades_count - 1];
-	float3 size = (volume.size.xyz - 1) * last_cascade.spacing.xyz;
-	float3 volume_center = last_cascade.min.xyz + size * 0.5;
-	float3 relative_position = world_position - volume_center;
-
-	float3 delta = abs(relative_position) - size * 0.5f;
-	if (all(delta < 0.0f))
-		return 1.0f;
-
-	float weight = 1.0f;
-	weight *= 1.0f - saturate(delta.x / last_cascade.spacing.x);
-	weight *= 1.0f - saturate(delta.y / last_cascade.spacing.y);
-	weight *= 1.0f - saturate(delta.z / last_cascade.spacing.z);
-	return weight;
+	float3 distance_to_edge = GetCascadeExtent(volume, last_cascade) - abs(world_position - GetCascadeCenter(volume, last_cascade));
+	float3 edge_weight = saturate(distance_to_edge / last_cascade.spacing.xyz);
+	return edge_weight.x * edge_weight.y * edge_weight.z;
 }
 
 float2 GetProbeUV(DDGIVolume volume, uint3 probe_coords, float3 direction, int texels)
@@ -224,7 +235,6 @@ float2 GetProbeUV(DDGIVolume volume, uint3 probe_coords, float3 direction, int t
 
 	float2 start_uv = float2(probe_coords.x * texels + layer_offset, probe_coords.z * texels);
 	start_uv += 1;
-	//start_uv += texels / 2.0f; // just for test
 	float2 oct_coord = (GetOctahedralCoordinates(direction) * 0.5 + 0.5) * (texels - 2);
 	start_uv += oct_coord;
 
@@ -238,8 +248,7 @@ bool GetCascadeForPosition(DDGIVolume volume, out DDGICascade cascade, out uint 
 	for (int i = 0; i < volume.cascades_count; i++)
 	{
 		cascade = volume.cascades[i];
-		float3 cascade_max = cascade.min.xyz + volume.size.xyz * cascade.spacing.xyz;
-		if (all(world_pos > cascade.min.xyz) && all(world_pos < cascade_max))
+		if (all(abs(world_pos - GetCascadeCenter(volume, cascade)) < GetCascadeExtent(volume, cascade)))
 		{
 			cascade_index = i;
 			return true;
@@ -255,29 +264,25 @@ bool GetCascadeForPosition(DDGIVolume volume, out DDGICascade cascade, out uint 
 float3 GetSurfaceBias(float3 surface_normal, float3 camera_position, float3 sample_position, DDGIVolume volume, uint cascade_id)
 {
 	DDGICascade cascade = volume.cascades[cascade_id];
-	float BIAS_FACTOR = 0.25f;
-    float NORMAL_TO_VIEW_WEIGHT = 0.3f;
-    float origin_to_sample_dst = length(camera_position - sample_position);
-	float spacing = max(cascade.spacing.x, max(cascade.spacing.y, cascade.spacing.z));
-    float sample_offset = min(spacing * BIAS_FACTOR, origin_to_sample_dst * 0.5f);
-    float3 sample_to_origin = normalize(camera_position - sample_position);
-    return lerp(sample_to_origin, surface_normal, NORMAL_TO_VIEW_WEIGHT) * sample_offset;
-	//return (surface_normal * 0.1) + (-camera_direction * 0.3);
+	float3 to_camera = camera_position - sample_position;
+	float to_camera_distance = length(to_camera);
+	float3 to_camera_direction = to_camera / to_camera_distance;
+	float3 normal_bias = surface_normal * SURFACE_BIAS_NORMAL;
+	float3 camera_bias = to_camera_direction * SURFACE_BIAS_CAMERA * min(1.0f, to_camera_distance);
+	return (normal_bias + camera_bias) * cascade.spacing.xyz;
 }
 
 float3 SampleIrradiance(float3 world_position, float3 world_normal, float3 surface_bias, DDGIVolume volume, uint cascade_id)
 {
 	DDGICascade cascade = volume.cascades[cascade_id];
-	float3 original_world_position = world_position;
-
 	world_position += surface_bias;
+	world_position = clamp(world_position, cascade.min.xyz, cascade.min.xyz + (volume.size.xyz - 1) * cascade.spacing.xyz);
 
 	float3 sum_irradiance = 0;
 	float sum_weight = 0;
 
 	float3 relative_position = world_position - cascade.min.xyz;
 	int3 base_probe_coords = int3(relative_position / cascade.spacing.xyz);
-	//base_probe_coords = (volume.size - 1) * 0.5;
 	base_probe_coords = clamp(base_probe_coords, int3(0, 0, 0), volume.size.xyz - 1);
 	
 	float3 base_probe_world_position = GetProbeWorldBasePosition(volume, base_probe_coords, cascade_id);
@@ -299,28 +304,21 @@ float3 SampleIrradiance(float3 world_position, float3 world_normal, float3 surfa
 		float2 probe_uv_distance = GetProbeUV(volume, probe_coords, -biased_to_probe_direction, DISTANCE_TEXELS);
 
 		Texture2DArray irradiance_atlas = ResourceDescriptorHeap[ddgi_irradiance_atlas_tex_id];
-		float4 irradiance = irradiance_atlas.SampleLevel(linear_clamp_sampler, float3(probe_uv_irradiance, cascade_id), 0);
+		float3 irradiance = irradiance_atlas.SampleLevel(linear_clamp_sampler, float3(probe_uv_irradiance, cascade_id), 0).rgb;
+		irradiance *= GetProbeLightingScale(volume, probe_coords, cascade_id);
 
-		#if SRGB_BLENDING
-			// Decode the tone curve, but leave a gamma = 2 curve to approximate sRGB blending
-			float exponent = IRRADIANCE_ENCODE_GAMMA * 0.5f;
-			irradiance = pow(irradiance, exponent);
-		#endif
-
-		float3 probe_direction = normalize(GetProbeWorldPosition(volume, probe_coords, cascade_id) - original_world_position);
-		
 		#if 0
 			// This creates a sharp cutoff at the edge, visible when classification is used and probes are disabled
-			float weight = saturate(dot(probe_direction, world_normal));
+			float weight = saturate(dot(biased_to_probe_direction, world_normal));
 		#elif 0
 			// [Sloan et al. 11] “Wrap Shading”
 			// Smooth transition (like NVIDIA DDGI)
-			float wrapShading = (dot(probe_direction, world_normal) + 1.0f) * 0.5f;
-			float weight = (wrapShading * wrapShading) + 0.2f;
+			float wrap_shading = (dot(biased_to_probe_direction, world_normal) + 1.0f) * 0.5f;
+			float weight = (wrap_shading * wrap_shading) + 0.2f;
 		#else
 			// Another way of smooth transition
-			float wrapShading = (dot(probe_direction, world_normal) + 1.0f) * 0.5f;
-			float weight = (wrapShading * wrapShading);
+			float wrap_shading = (dot(biased_to_probe_direction, world_normal) + 1.0f) * 0.5f;
+			float weight = (wrap_shading * wrap_shading);
 		#endif
 
 		Texture2DArray distance_atlas = ResourceDescriptorHeap[ddgi_distance_atlas_tex_id];
@@ -341,12 +339,20 @@ float3 SampleIrradiance(float3 world_position, float3 world_normal, float3 surfa
 			chebyshev_weight = variance / (variance + (v * v));
 
 			// Increase the contrast in the weight
-			chebyshev_weight = max((chebyshev_weight * chebyshev_weight * chebyshev_weight), 0.f);
+			#if 0
+				chebyshev_weight = max((chebyshev_weight * chebyshev_weight * chebyshev_weight), 0.f);
+			#else
+				chebyshev_weight = pow(chebyshev_weight, 6.0f);
+			#endif
 		}
 
-		// Avoid visibility weights ever going all the way to zero because
-		// when *no* probe has visibility we need a fallback value
-		weight *= max(0.05f, chebyshev_weight);
+		#if 0
+			// Avoid visibility weights ever going all the way to zero because
+			// when *no* probe has visibility we need a fallback value
+			weight *= max(0.05f, chebyshev_weight);
+		#else
+			weight *= chebyshev_weight;
+		#endif
 
 		// Avoid a weight of zero
 		weight = max(1e-6f, weight);
@@ -361,16 +367,35 @@ float3 SampleIrradiance(float3 world_position, float3 world_normal, float3 surfa
 		float3 trilinear = max(0.001f, lerp(1.0 - alpha, alpha, offset));
 		weight *= trilinear.x * trilinear.y * trilinear.z;
 
-		sum_irradiance += irradiance.rgb * weight;
+		sum_irradiance += irradiance * weight;
 		sum_weight += weight;
 	}
 
 	if(sum_weight == 0.0f) return 0.0f;
 
 	sum_irradiance /= sum_weight;
-	#if SRGB_BLENDING
-		sum_irradiance *= sum_irradiance;
-	#endif
 	sum_irradiance *= PI2;  // Multiply by the area of the integration domain (hemisphere) for Monte Carlo
 	return sum_irradiance;
+}
+
+float GetCascadeWeight(float3 world_position, DDGIVolume volume, out uint cascade_index)
+{
+	DDGICascade cascade;
+	GetCascadeForPosition(volume, cascade, cascade_index, world_position);
+	if (cascade_index == volume.cascades_count - 1)
+		return 1.0f;
+
+	float3 distance_to_edge = GetCascadeExtent(volume, cascade) - abs(world_position - GetCascadeCenter(volume, cascade));
+	return saturate(min(distance_to_edge.x, min(distance_to_edge.y, distance_to_edge.z)) / (cascade.spacing.x * 0.5f));
+}
+
+float3 SampleCascadesIrradiance(float3 world_position, float3 world_normal, float3 view_origin, DDGIVolume volume)
+{
+	uint cascade_index;
+	float cascade_weight = GetCascadeWeight(world_position, volume, cascade_index);
+
+	float3 irradiance = SampleIrradiance(world_position, world_normal, GetSurfaceBias(world_normal, view_origin, world_position, volume, cascade_index), volume, cascade_index) * cascade_weight;
+	if (cascade_weight < 1.0f)
+		irradiance += SampleIrradiance(world_position, world_normal, GetSurfaceBias(world_normal, view_origin, world_position, volume, cascade_index + 1), volume, cascade_index + 1) * (1.0f - cascade_weight);
+	return irradiance;
 }

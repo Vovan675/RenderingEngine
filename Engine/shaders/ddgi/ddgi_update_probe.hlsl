@@ -9,6 +9,7 @@ cbuffer Constants : register(b1)
 	uint output_atlas_tex_id;
 	uint ray_data_buffer_id;
 	uint probes_to_update_buffer_id;
+	uint metadata_atlas_tex_id;
 };
 
 static StructuredBuffer<uint> probes_to_update = ResourceDescriptorHeap[probes_to_update_buffer_id];
@@ -16,10 +17,15 @@ static StructuredBuffer<uint> probes_to_update = ResourceDescriptorHeap[probes_t
 #ifdef IRRADIANCE
 	[[vk::image_format("rgba16f")]]
 	static RWTexture2DArray<float4> output_atlas = ResourceDescriptorHeap[output_atlas_tex_id];
+
+	[[vk::image_format("rgba16f")]]
+	static RWTexture2DArray<float4> metadata_atlas = ResourceDescriptorHeap[metadata_atlas_tex_id];
 #else
 	[[vk::image_format("rg16f")]]
 	static RWTexture2DArray<float2> output_atlas = ResourceDescriptorHeap[output_atlas_tex_id];
 #endif
+
+groupshared float4 ray_data_cache[TRACE_TEXELS * TRACE_TEXELS];
 
 struct CSInput
 {
@@ -70,95 +76,72 @@ void CSMain(CSInput input)
 	float2 oct_coord = GetNormalizedOctahedralCoordinates(int2(input.group_thread_id.xy) - 1, NUM_TEXELS - 2);
 	float3 texel_direction = GetOctahedralDirection(oct_coord);
 
-	if (IsProbeDisabled(volume, probe_coord, cascade_id))
-		return;
-
-	uint ray_index = 0;
-	#if USE_FIXED_RAYS
-		if (volume.use_relocation || volume.use_classification)
-			ray_index = NUM_FIXED_RAYS;
-	#endif
+	StructuredBuffer<float4> ray_data_buffer = ResourceDescriptorHeap[ray_data_buffer_id];
+	for (uint cache_index = input.group_index; cache_index < volume.rays_per_probe; cache_index += NUM_TEXELS * NUM_TEXELS)
+		ray_data_cache[cache_index] = ray_data_buffer[GetRayDataIndex(input.group_id.x, cache_index, volume)];
+	GroupMemoryBarrierWithGroupSync();
 
 	#ifdef IRRADIANCE
+		// Irradiance is smooth. It is an integral over all rays around
 		float3 irradiance_average = float3(0, 0, 0);
 		float weight_sum = 0;
+		float luminance_sum = 0;
 
-		int max_back_faces = int(float(volume.rays_per_probe) * BACKFACE_THRESHOLD_UPDATE);
+		float max_back_faces = volume.rays_per_probe * BACKFACE_THRESHOLD;
 		int back_face_count = 0;
-		
-		StructuredBuffer<float4> ray_data_buffer = ResourceDescriptorHeap[ray_data_buffer_id];
-		for (; ray_index < volume.rays_per_probe; ray_index++)
-		{
-			uint ray_data_index = GetRayDataIndex(probe_id, ray_index, volume);
-			float4 ray_data = ray_data_buffer[ray_data_index];
 
+		for (uint ray_index = 0; ray_index < volume.rays_per_probe; ray_index++)
+		{
+			float4 ray_data = ray_data_cache[ray_index];
 			float3 radiance = ray_data.rgb;
 			float distance = ray_data.a;
 
 			if (distance < 0)
 			{
 				back_face_count++;
-				if (back_face_count >= max_back_faces)
+				if (back_face_count > max_back_faces)
 					return;
 				continue;
 			}
 			float3 ray_direction = GetProbeRayDirection(ray_index, volume);
 			float weight = saturate(dot(ray_direction, texel_direction));
 
-			irradiance_average += ray_data.rgb * weight;
+			irradiance_average += radiance * weight;
 			weight_sum += weight;
+			luminance_sum += Luminance(radiance);
 		}
 
+		// Store average luminance scale. This is used for encoding irradiance near 1.0
+		float lighting_scale = max(luminance_sum / volume.rays_per_probe, 1e-6f);
+		if (all(input.group_thread_id.xy == 0))
+			metadata_atlas[uint3(GetProbeCandidateTexelCoords(volume, probe_coord), cascade_id)].w = lighting_scale;
+
+		// Don't accumulate, use fixed rays
 		// Normalize irradiance. To match the Monte Carlo Estimator of Irradiance. We have cosine weighted thats why factor of 2.0.
-		irradiance_average /= (2.0 * max(weight_sum, 1e-9f));
-		#if SRGB_BLENDING
-			irradiance_average = pow(irradiance_average, 1.0 / IRRADIANCE_ENCODE_GAMMA);
-		#endif
-
-		float3 prev = output_atlas[texel_coord].rgb;
-		float blend_factor = DEFAULT_BLEND_FACTOR;
-		
-		// If was cleared, override previous value
-		if (dot(prev, prev) == 0) blend_factor = 0;
-
-		float blend_weight = saturate(1.0f - blend_factor);
-
-		float3 result = lerp(prev, irradiance_average, blend_weight);
-		output_atlas[texel_coord] = float4(result, 1);
-		//output_atlas[texel_coord] = float4(pow(cascade / 5.0f, 2.0), 0, 0, 1);
-		//output_atlas[texel_coord] = float4(probe_coord / 16.0f, 1);
+		irradiance_average /= (2.0 * max(weight_sum, 1e-9f)) * lighting_scale;
+		output_atlas[texel_coord] = float4(irradiance_average, 1.0f);
 	#else
+		// Depth doensn't need to be smooth. It is better to be precise, so interpolate inside its texels (2x2 box filter in general)
+		float max_ray_distance = length(cascade.spacing.xyz) * (1.0f + RELOCATION_MAX_OFFSET);
+		int interior_texels = NUM_TEXELS - 2;
+		uint ray_block_size = TRACE_TEXELS / interior_texels;
+		uint2 interior_texel = clamp(int2(input.group_thread_id.xy) - 1, 0, interior_texels - 1);
+		uint2 first_ray_texel = interior_texel * ray_block_size;
+
 		float2 distance_average = float2(0, 0);
-		float weight_sum = 0;
-
-		StructuredBuffer<float4> ray_data_buffer = ResourceDescriptorHeap[ray_data_buffer_id];
-		for (; ray_index < volume.rays_per_probe; ray_index++)
+		for (uint y = 0; y < ray_block_size; y++)
 		{
-			uint ray_data_index = GetRayDataIndex(probe_id, ray_index, volume);
-			float ray_distance = ray_data_buffer[ray_data_index].a;
-
-			float3 ray_direction = GetProbeRayDirection(ray_index, volume);
-			float weight = saturate(dot(ray_direction, texel_direction));
-			// Weight Sharpness
-			weight = pow(weight, DISTANCE_WEIGHT_POWER);
-			
-			float max_ray_distance = length(cascade.spacing.xyz) * 1.5; 
-
-			ray_distance = min(abs(ray_distance), max_ray_distance);
-
-			distance_average += float2(abs(ray_distance), ray_distance * ray_distance) * weight;
-			weight_sum += weight;
+			for (uint x = 0; x < ray_block_size; x++)
+			{
+				uint2 ray_texel = first_ray_texel + uint2(x, y);
+				float ray_distance = ray_data_cache[GetProbeRayIndex(ray_texel)].a;
+				ray_distance = min(abs(ray_distance), max_ray_distance);
+				distance_average += float2(ray_distance, ray_distance * ray_distance);
+			}
 		}
 
-		distance_average /= weight_sum;
-
-		float2 prev = output_atlas[texel_coord];
-		float blend_factor = DEFAULT_BLEND_FACTOR;
-		if (dot(prev, prev) == 0) blend_factor = 0;
-		float blend_weight = saturate(1.0f - blend_factor);
-
-		float2 result = lerp(prev, distance_average, blend_weight);
-		output_atlas[texel_coord] = result;
+		// Don't accumulate, use fixed rays
+		output_atlas[texel_coord] = distance_average / (ray_block_size * ray_block_size);
 	#endif
 
     AllMemoryBarrierWithGroupSync();

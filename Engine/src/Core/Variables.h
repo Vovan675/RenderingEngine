@@ -317,8 +317,6 @@ struct DDGISettings
 	int probes_per_frame = 1024;
 	bool use_relocation = true;
 	bool use_classification = true;
-	bool use_fixed_rays = false;
-	bool trace_random_direction = true;
 };
 
 REFLECT_BEGIN(DDGISettings)
@@ -332,8 +330,6 @@ REFLECT_BEGIN(DDGISettings)
 	REFLECT_FIELD(probes_per_frame).range(16.0f, 16384.0f).logarithmic().tooltip("Must be a power of two").EDIT_IF(owner.enabled),
 	REFLECT_FIELD(use_relocation).EDIT_IF(owner.enabled),
 	REFLECT_FIELD(use_classification).EDIT_IF(owner.enabled),
-	REFLECT_FIELD(use_fixed_rays).EDIT_IF(owner.enabled),
-	REFLECT_FIELD(trace_random_direction).EDIT_IF(owner.enabled),
 REFLECT_END()
 
 // Authored render settings that are saved

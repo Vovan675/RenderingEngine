@@ -18,8 +18,6 @@ public:
 
 	const DDGIVolumeGPU &getVolume() const { return volume; }
 private:
-	eastl::vector<eastl::pair<const char *, const char *>> calculateDefines(eastl::vector<eastl::pair<const char *, const char *>> additional = {});
-
 	void update_probes();
 
 	void addPreparePass(FrameGraph &fg);

@@ -93,44 +93,12 @@ PSOutput PSMain(VSInput input)
 		float volume_weight = GetVolumeWeight(world_pos, volume);
 		if (volume_weight > 0.0f)
 		{
-			//output.ambient = float4(volume_weight, 0, 0, 1.0);
-
-			DDGICascade cascade;
-			uint cascade_index;
-			GetCascadeForPosition(volume, cascade, cascade_index, world_pos);
-
-			float3 cascade_spacing = cascade.spacing.xyz;
-			float3 cascade_extent = volume.size.xyz * (cascade_spacing * 0.5);
-			float3 cascade_center = cascade.min.xyz + cascade_extent;
-			float3 cascade_blend_point = world_pos - cascade_center;
-
-			const float blend_size = 0.5f;
-			float fade_distance = cascade_spacing.x * blend_size;
-			
-			float3 extent_minus_blend_point = cascade_extent - abs(cascade_blend_point);
-			float cascade_weight = saturate(min(extent_minus_blend_point.x, min(extent_minus_blend_point.y, extent_minus_blend_point.z)) / fade_distance);
-
-			#define USE_CASCADES_BLENDING 1
-
-			float3 surface_bias = GetSurfaceBias(normal, camera_position.xyz, world_pos, volume, cascade_index);
-			float3 irradiance = SampleIrradiance(world_pos, normal, surface_bias, volume, cascade_index);
-
-			#if USE_CASCADES_BLENDING == 1
-				irradiance *= cascade_weight;
-
-				// If not last cascade and blending needed
-				if (cascade_index < volume.cascades_count - 1 && cascade_weight < 0.99f)
-				{
-					cascade_index++;
-					float3 surface_bias = GetSurfaceBias(normal, camera_position.xyz, world_pos, volume, cascade_index);
-					irradiance += SampleIrradiance(world_pos, normal, surface_bias, volume, cascade_index) * (1.0f - cascade_weight);
-				}
-			#endif
-
+			float3 irradiance = SampleCascadesIrradiance(world_pos, normal, camera_position.xyz, volume);
 			output.ambient = float4((diffuse_color / PI) * irradiance * volume_weight * ssao, 1.0);
-			//output.ambient = float4(cascade_weight, 0, 0, 1.0);
-			//output.ambient = float4(cascade_index / 5.0, 0, 0, 1);
-			//output.ambient = float4(irradiance, 1.0);
+			#if 1
+				// Use cascade irradiance as specular approximation. Ideally only for rough reflections
+				output.specular = float4((irradiance / PI) * (f0 * brdf_lut.x + brdf_lut.y) * volume_weight * specular_ao, 1.0);
+			#endif
 		}
 	}
 	#endif
