@@ -229,6 +229,7 @@ void DebugRenderer::addTextureDebugPass(FrameGraph &fg)
 		builder.readTexture(GFXRID(GBufferNormal));
 		builder.readTexture(GFXRID(GBufferDepth));
 		builder.readTexture(GFXRID(GBufferShading));
+		builder.readTexture(GFXRID(GBufferEmissive));
 		builder.readTexture(GFXRID(MotionVectors));
 		builder.readTexture(GFXRID(DiffuseLight));
 		builder.readTexture(GFXRID(SpecularLight));
@@ -255,6 +256,7 @@ void DebugRenderer::addTextureDebugPass(FrameGraph &fg)
 
 		ubo.albedo_tex_id = resources.getReadTexture(GFXRID(GBufferAlbedo));
 		ubo.shading_tex_id = resources.getReadTexture(GFXRID(GBufferShading));
+		ubo.emissive_tex_id = resources.getReadTexture(GFXRID(GBufferEmissive));
 		ubo.normal_tex_id = resources.getReadTexture(GFXRID(GBufferNormal));
 		ubo.depth_tex_id = resources.getReadTexture(GFXRID(GBufferDepth));
 		ubo.motion_vectors_tex_id = resources.getReadTexture(GFXRID(MotionVectors));

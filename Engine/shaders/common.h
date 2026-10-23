@@ -166,8 +166,10 @@ struct Material
 	uint roughness_tex_id;
 	uint specular_tex_id;
 	float4 shading;
+	float4 emissive;
 	uint normal_tex_id;
-	uint pad[3];
+	uint emissive_tex_id;
+	uint pad[2];
 };
 
 #define INSTANCE_FLAG_INVALID 0x1

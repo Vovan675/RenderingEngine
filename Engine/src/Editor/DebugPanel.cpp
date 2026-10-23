@@ -108,7 +108,7 @@ void DebugPanel::renderImGui(EditorContext &context)
 
 		if (render_debug_rendering)
 		{
-			const char *items[] = {"All", "Final Composite", "Albedo", "Metalness", "Roughness", "Specular", "Normal", "Depth", "Position", "Light Diffuse", "Light Specular", "BRDF LUT", "SSAO", "DDGI", "HiZ", "Debug Texture", "Overdraw", "Motion Vectors"};
+			const char *items[] = {"All", "Final Composite", "Albedo", "Metalness", "Roughness", "Specular", "Emissive", "Normal", "Depth", "Position", "Light Diffuse", "Light Specular", "BRDF LUT", "SSAO", "DDGI", "HiZ", "Debug Texture", "Overdraw", "Motion Vectors"};
 			int mode = render_debug_rendering_mode;
 			if (UI::combo("Preview", &mode, items, IM_ARRAYSIZE(items)))
 				render_debug_rendering_mode = mode;

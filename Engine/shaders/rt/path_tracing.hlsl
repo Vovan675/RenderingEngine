@@ -28,6 +28,7 @@ struct RayPayload {
 struct SurfaceProperties
 {
 	float3 albedo;
+	float3 emissive;
 	float metalness;
 	float roughness;
 	float specular;
@@ -103,6 +104,9 @@ SurfaceProperties EvaluateMaterial(Material material, float2 uv)
 {
 	SurfaceProperties props;
 	props.albedo = (material.albedo_tex_id > 0) ? SampleTextureLevel(material.albedo_tex_id, uv, 0).rgb : material.albedo.rgb;
+	props.emissive = material.emissive.rgb;
+	if (material.emissive_tex_id > 0)
+		props.emissive *= SampleTextureLevel(material.emissive_tex_id, uv, 0).rgb;
 	props.metalness = (material.metalness_tex_id > 0) ? SampleTextureLevel(material.metalness_tex_id, uv, 0).b : material.shading.r;
 	props.roughness = (material.roughness_tex_id > 0) ? SampleTextureLevel(material.roughness_tex_id, uv, 0).g : material.shading.g;
 	props.roughness = max(props.roughness, MIN_PERCEPTUAL_ROUGHNESS);
@@ -353,6 +357,7 @@ void RayGen()
 		
 		// Direct lighting with relaxed firefly threshold
 		float3 direct = throughput * SampleDirectLighting(tlas, hit, surface, -ray.Direction);
+		direct += throughput * surface.emissive;
 		radiance += bounce > 0 ? FireflyFilter(direct, BASE_FIREFLY_THRESHOLD * 6.0, fireflyFilterK) : direct;
 		
 		// Sample BRDF and update path

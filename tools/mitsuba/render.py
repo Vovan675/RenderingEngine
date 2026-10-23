@@ -16,10 +16,10 @@ else:
 script_dir = os.path.dirname(os.path.abspath(__file__))
 cache_dir = os.path.join(script_dir, 'tex_cache')
 
-def cache_path(source, suffix):
+def cache_path(source, suffix, extension='.png'):
     folder = os.path.basename(os.path.dirname(source))
     name = os.path.splitext(os.path.basename(source))[0]
-    return os.path.join(cache_dir, folder + '_' + name + suffix + '.png')
+    return os.path.join(cache_dir, folder + '_' + name + suffix + extension)
 
 def decode_dds(source):
     out = cache_path(source, '')
@@ -56,6 +56,17 @@ def extract_channel(source, channel):
     Image.fromarray(pixels[:, :, index]).save(out, compress_level=1)
     return out
 
+def scale_bitmap(source, scale):
+    scale_suffix = '_scale_' + '_'.join(f'{value:g}' for value in scale)
+    out = cache_path(source, scale_suffix, '.exr')
+    if os.path.exists(out):
+        return out
+
+    linear = mi.Bitmap(source).convert(mi.Bitmap.PixelFormat.RGB, mi.Struct.Type.Float32, srgb_gamma=False)
+    pixels = np.array(linear) * np.array(scale, dtype=np.float32)
+    mi.Bitmap(pixels).write(out)
+    return out
+
 def find_bitmaps(node, found):
     if isinstance(node, dict):
         if node.get('type') == 'bitmap':
@@ -84,6 +95,9 @@ def resolve_textures(scene_dict):
             node['filename'] = cache_path(node['filename'], '')
         if 'channel' in node:
             node['filename'] = extract_channel(node['filename'], node.pop('channel'))
+        if 'scale' in node:
+            node['filename'] = scale_bitmap(node['filename'], node.pop('scale'))
+            node['raw'] = True
 
 # Convert my custom lookat and matrix to mitsuba's format
 def build_transforms(node):

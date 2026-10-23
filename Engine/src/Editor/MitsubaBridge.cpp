@@ -15,6 +15,7 @@ void MitsubaBridge::renderImGui(EditorContext &context)
 
 	UI::sliderFloat("Render Scale", &render_scale, 0.1f, 1.0f);
 	UI::sliderInt("Max Depth", &max_depth, 2, 16);
+	UI::checkbox("Emission", &emission);
 
 	if (ImGui::Button("Render (M)", ImVec2(-FLT_MIN, 0)))
 		runRender(context);
@@ -154,6 +155,22 @@ static nlohmann::json material_to_json_bsdf(Material *material)
 	return bsdf_json;
 }
 
+static nlohmann::json material_to_json_emitter(Material *material)
+{
+	if (render_lighting_only || !material)
+		return nullptr;
+
+	glm::vec3 radiance = glm::vec3(material->emissive) * material->emissive_intensity;
+	if (radiance == glm::vec3(0.0f))
+		return nullptr;
+
+	std::filesystem::path path = AssetManager::getPath(material->emissive_tex.asset);
+	if (!path.empty())
+		return {{"type", "area"}, {"radiance", { {"type", "bitmap"}, {"filename", std::filesystem::absolute(path).generic_string()}, {"scale", {radiance.x, radiance.y, radiance.z}} }}};
+
+	return {{"type", "area"}, {"radiance", { {"type", "rgb"}, {"value", {radiance.x, radiance.y, radiance.z}} }}};
+}
+
 static int write_lights(nlohmann::json &scene)
 {
 	int count = 0;
@@ -258,12 +275,16 @@ bool MitsubaBridge::export_scene(EditorContext &context, const std::filesystem::
 
 			Material *material = mesh_renderer.getMaterial(i);
 			glm::mat4 world = transform.getWorldTransform() * mesh->root_transform;
-			scene["mesh_" + std::to_string(exported)] = {
+			nlohmann::json &mesh_json = scene["mesh_" + std::to_string(exported)];
+			mesh_json = {
 				{"type", "ply"},
 				{"filename", ply_path.generic_string()},
 				{"to_world", mat4_to_json_transform(world)},
 				{"bsdf_json", material_to_json_bsdf(material)},
 			};
+			nlohmann::json emitter = material_to_json_emitter(material);
+			if (emission && !emitter.is_null())
+				mesh_json["emitter"] = emitter;
 			exported++;
 		}
 	}

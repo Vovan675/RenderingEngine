@@ -19,6 +19,7 @@ inline const char *const specular_texture_layout_items[] = {"Specular", "Occlusi
 struct ModelImportSettings
 {
 	SpecularTextureLayout specular_texture_layout = SPECULAR_TEXTURE_SPECULAR;
+	float emissive_scale = 1.0f;
 
 	// Meshlet generation
 	MeshletMode meshlet_mode = MESHLET_MODE_AUTO;
@@ -35,6 +36,7 @@ struct ModelImportSettings
 
 REFLECT_BEGIN(ModelImportSettings)
 	REFLECT_FIELD(specular_texture_layout).label("Specular Texture Layout").items(specular_texture_layout_items),
+	REFLECT_FIELD(emissive_scale).range(0.0f, 100000.0f).format("%.0f nits").logarithmic(),
 	REFLECT_FIELD(meshlet_mode).label("Meshlet (Nanite) Geometry").items(meshlet_mode_items),
 	REFLECT_CATEGORY("Meshlets"),
 	REFLECT_FIELD(meshlet_max_vertices).range(32.0f, 256.0f).EDIT_IF(owner.meshlet_mode != MESHLET_MODE_DISABLED),

@@ -104,6 +104,7 @@ void DefferedCompositeRenderer::addPasses(FrameGraph &fg)
 		builder.readTexture(GFXRID(SpecularLight));
 		builder.readTexture(GFXRID(GBufferAlbedo));
 		builder.readTexture(GFXRID(GBufferDepth));
+		builder.readTexture(GFXRID(GBufferEmissive));
 	},
 	[=](const RenderPassResources &resources, RHICommandList *cmd_list)
 	{
@@ -119,6 +120,7 @@ void DefferedCompositeRenderer::addPasses(FrameGraph &fg)
 			uint32_t indirect_specular_tex_id = 0;
 			uint32_t albedo_tex_id = 0;
 			uint32_t depth_tex_id = 0;
+			uint32_t emissive_tex_id = 0;
 		} ubo;
 
 		ubo.lighting_diffuse_tex_id = resources.getReadTexture(GFXRID(DiffuseLight));
@@ -127,6 +129,7 @@ void DefferedCompositeRenderer::addPasses(FrameGraph &fg)
 		ubo.indirect_specular_tex_id = resources.getReadTexture(GFXRID(CompositeIndirectSpecular));
 		ubo.albedo_tex_id = resources.getReadTexture(GFXRID(GBufferAlbedo));
 		ubo.depth_tex_id = resources.getReadTexture(GFXRID(GBufferDepth));
+		ubo.emissive_tex_id = resources.getReadTexture(GFXRID(GBufferEmissive));
 
 		gGlobalPipeline->bindScreenQuadPipeline(cmd_list, gDynamicRHI->createShader(L"shaders/deffered_composite.hlsl", FRAGMENT_SHADER));
 

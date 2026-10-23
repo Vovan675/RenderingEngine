@@ -15,6 +15,7 @@ cbuffer UBO : register(b0)
 	uint composite_final_tex_id;
 	uint albedo_tex_id;
 	uint shading_tex_id;
+	uint emissive_tex_id;
 	uint normal_tex_id;
 	uint depth_tex_id;
 	uint light_diffuse_id;
@@ -101,6 +102,7 @@ PSOutput PSMain(VSInput input)
 	float4 composite_final = SampleTexture(composite_final_tex_id, uv);
 	float4 albedo = SampleTexture(albedo_tex_id, uv);
 	float4 shading = SampleTexture(shading_tex_id, uv);
+	float4 emissive = SampleTexture(emissive_tex_id, uv);
 	float4 normal = SampleTexture(normal_tex_id, uv);
 	float depth = SampleTexture(depth_tex_id, uv).r;
 	float3 diffuse = SampleTexture(light_diffuse_id, uv).rgb;
@@ -126,12 +128,15 @@ PSOutput PSMain(VSInput input)
 			value = float4(shading.b, shading.b, shading.b, 1.0f);
 			break;
 		case 6:
-			value = float4(unpackGBufferNormal(normal.rgb) * 0.5f + 0.5f, 1.0f);
+			value = float4(emissive.rgb, 1.0f);
 			break;
 		case 7:
-			value = float4(depth, depth, depth, 1.0f);
+			value = float4(unpackGBufferNormal(normal.rgb) * 0.5f + 0.5f, 1.0f);
 			break;
 		case 8:
+			value = float4(depth, depth, depth, 1.0f);
+			break;
+		case 9:
 		{
 			float3 view_pos = GetVSPosition(uv, depth);
 			float3 world_pos = GetWSPosition(uv, depth);
@@ -139,19 +144,19 @@ PSOutput PSMain(VSInput input)
 			value = float4(world_pos.xyz, 1.0f);
 			break;
 		}
-		case 9:
+		case 10:
 			value = float4(diffuse, 1.0f);
 			break;
-		case 10:
+		case 11:
 			value = float4(specular, 1.0f);
 			break;
-		case 11:
+		case 12:
 			value = float4(brdf_lut, 0.0f, 1.0f);
 			break;
-		case 12:
+		case 13:
 			value = float4(ssao, ssao, ssao, 1.0f);
 			break;
-		case 13:
+		case 14:
 		{
 			value = composite_final;
 
@@ -235,7 +240,7 @@ PSOutput PSMain(VSInput input)
 				*/
 		}
 		break;
-		case 14:
+		case 15:
 		{
 			Texture2D tex = ResourceDescriptorHeap[hiz_tex_id];
 			uint width, height, mip_count;
@@ -246,7 +251,7 @@ PSOutput PSMain(VSInput input)
 			value = float4(hiz, 1);
 		}
 		break;
-		case 15:
+		case 16:
 		{
 			Texture2D tex = ResourceDescriptorHeap[debug_tex_srv_id];
 			float3 v = tex.Sample(point_wrap_sampler, uv).rgb;
@@ -254,7 +259,7 @@ PSOutput PSMain(VSInput input)
 			value = float4(v, 1) + 0.01 * albedo;
 		}
 		break;
-		case 16:
+		case 17:
 		{
 			Texture2D tex = ResourceDescriptorHeap[overdraw_tex_srv_id];
 			uint v = tex.Sample(point_wrap_sampler, uv).r;
@@ -262,7 +267,7 @@ PSOutput PSMain(VSInput input)
 			value = float4(v / 10.0f, 0, 0, 1);
 		}
 		break;
-		case 17:
+		case 18:
 		{
 			float2 motion = SampleTexture(motion_vectors_tex_id, uv).rg;
 			value = float4(motion * 10.0f, 0.0f, 1.0f);

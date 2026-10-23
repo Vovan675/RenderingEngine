@@ -13,7 +13,9 @@ struct MaterialGPU
 	uint32_t specular_tex_id = 0;
 	// metalness, roughness, specular
 	glm::vec4 shading = glm::vec4(0, 0, 0.5, 1);
+	glm::vec4 emissive = glm::vec4(0, 0, 0, 1);
 	uint32_t normal_tex_id = 0;
+	uint32_t emissive_tex_id = 0;
 };
 
 #define INVALID_LIGHT_INDEX 0xFFFFFFFFu

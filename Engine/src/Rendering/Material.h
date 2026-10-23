@@ -40,6 +40,10 @@ public:
 
 	MaterialTexture normal_tex;
 
+	MaterialTexture emissive_tex;
+	glm::vec4 emissive = glm::vec4(0, 0, 0, 1);
+	float emissive_intensity = 1.0f;
+
 	void update()
 	{
 		auto update_texture = [](MaterialTexture &material_texture, Format format)
@@ -67,6 +71,7 @@ public:
 		update_texture(roughness_tex, FORMAT_R8G8B8A8_UNORM);
 		update_texture(specular_tex, FORMAT_R8G8B8A8_UNORM);
 		update_texture(normal_tex, FORMAT_R8G8B8A8_UNORM);
+		update_texture(emissive_tex, FORMAT_R8G8B8A8_SRGB);
 	}
 
 	bool usesTexture(Engine::GUID guid) const
@@ -75,7 +80,8 @@ public:
 			metalness_tex.asset.guid == guid ||
 			roughness_tex.asset.guid == guid ||
 			specular_tex.asset.guid == guid ||
-			normal_tex.asset.guid == guid;
+			normal_tex.asset.guid == guid ||
+			emissive_tex.asset.guid == guid;
 	}
 
 	void invalidateTextures()
@@ -85,6 +91,7 @@ public:
 		roughness_tex.bindless_id = 0;
 		specular_tex.bindless_id = 0;
 		normal_tex.bindless_id = 0;
+		emissive_tex.bindless_id = 0;
 	}
 };
 
@@ -98,4 +105,7 @@ REFLECT_BEGIN(Material)
 	REFLECT_FIELD(specular).range(0.0f, 1.0f).format("%.2f"),
 	REFLECT_FIELD(specular_tex).label("Specular Texture"),
 	REFLECT_FIELD(normal_tex).label("Normal Texture"),
+	REFLECT_FIELD(emissive).color(),
+	REFLECT_FIELD(emissive_intensity).range(0.0f, 100000.0f).format("%.0f nits").logarithmic(),
+	REFLECT_FIELD(emissive_tex).label("Emissive Texture"),
 REFLECT_END()

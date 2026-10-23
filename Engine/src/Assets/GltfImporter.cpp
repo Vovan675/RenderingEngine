@@ -289,7 +289,7 @@ static AssetReference resolve_texture(const cgltf_texture_view &view, const char
 	return AssetReference(std::filesystem::path(gltf_path).parent_path() / uri);
 }
 
-static Ref<Material> extract_material(const cgltf_material *mat, const char *gltf_path)
+static Ref<Material> extract_material(const cgltf_material *mat, const char *gltf_path, const ModelImportSettings &settings)
 {
 	Ref<Material> m = new Material();
 	if (!mat || !mat->has_pbr_metallic_roughness)
@@ -305,6 +305,10 @@ static Ref<Material> extract_material(const cgltf_material *mat, const char *glt
 	m->normal_tex.asset = resolve_texture(mat->normal_texture, gltf_path);
 	if (mat->has_specular)
 		m->specular = 0.5f * mat->specular.specular_factor;
+	
+	m->emissive_tex.asset = resolve_texture(mat->emissive_texture, gltf_path);
+	m->emissive = glm::vec4(mat->emissive_factor[0], mat->emissive_factor[1], mat->emissive_factor[2], 1.0f);
+	m->emissive_intensity = (mat->has_emissive_strength ? mat->emissive_strength.emissive_strength : 1.0f) * settings.emissive_scale;
 	return m;
 }
 
@@ -344,7 +348,7 @@ using GltfMeshCache = eastl::unordered_map<GltfMeshKey, eastl::vector<Ref<Engine
 static void process_node(const cgltf_node *gltf_node, MeshNode *parent,
 							eastl::vector<MeshNode *> &linear_nodes,
 							const GltfMeshCache &mesh_cache,
-							const char *path)
+							const char *path, const ModelImportSettings &settings)
 {
 	MeshNode *node = new MeshNode();
 	linear_nodes.push_back(node);
@@ -373,14 +377,14 @@ static void process_node(const cgltf_node *gltf_node, MeshNode *parent,
 				{
 					MeshNode::Primitive &prim = node->primitives.emplace_back();
 					prim.mesh = it->second[p];
-					prim.material = extract_material(gltf_mesh->primitives[p].material, path);
+					prim.material = extract_material(gltf_mesh->primitives[p].material, path, settings);
 				}
 			}
 		}
 	}
 
 	for (cgltf_size c = 0; c < gltf_node->children_count; c++)
-		process_node(gltf_node->children[c], node, linear_nodes, mesh_cache, path);
+		process_node(gltf_node->children[c], node, linear_nodes, mesh_cache, path, settings);
 }
 
 static constexpr uint64_t AUTO_MESHLET_VERTEX_COUNT = 1'000'000;
@@ -648,14 +652,14 @@ void GltfImporter::import(const char *path, Model *model, ModelImportSettings &s
 	// Build scene graph
 	if (scene->nodes_count == 1)
 	{
-		process_node(scene->nodes[0], nullptr, model->linear_nodes, mesh_cache, path);
+		process_node(scene->nodes[0], nullptr, model->linear_nodes, mesh_cache, path, settings);
 	} else
 	{
 		MeshNode *synthetic = new MeshNode();
 		synthetic->name = "Scene";
 		model->linear_nodes.push_back(synthetic);
 		for (cgltf_size i = 0; i < scene->nodes_count; i++)
-			process_node(scene->nodes[i], synthetic, model->linear_nodes, mesh_cache, path);
+			process_node(scene->nodes[i], synthetic, model->linear_nodes, mesh_cache, path, settings);
 	}
 	CORE_INFO("GltfImporter: done, {} unique meshes built, {} total nodes", total_jobs, model->linear_nodes.size());
 

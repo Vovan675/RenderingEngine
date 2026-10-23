@@ -158,11 +158,13 @@ void SceneRenderer::refresh_materials(entt::entity entity_id, MeshRendererCompon
 		{
 			material_gpu.albedo = material->albedo;
 			material_gpu.shading = glm::vec4(material->metalness, material->roughness, material->specular, 1.0f);
+			material_gpu.emissive = material->emissive * material->emissive_intensity;
 			material_gpu.albedo_tex_id = material->albedo_tex.bindless_id;
 			material_gpu.metalness_tex_id = material->metalness_tex.bindless_id;
 			material_gpu.roughness_tex_id = material->roughness_tex.bindless_id;
 			material_gpu.specular_tex_id = material->specular_tex.bindless_id;
 			material_gpu.normal_tex_id = material->normal_tex.bindless_id;
+			material_gpu.emissive_tex_id = material->emissive_tex.bindless_id;
 		}
 
 		materials_table.set(it->second.start + i, material_gpu); // In future materials would be globally unique, so every material would hold its own slot

@@ -114,11 +114,16 @@ MeshFormat::MaterialDescriptor encodeMaterial(const Material *mat)
 	d.metalness = mat->metalness;
 	d.roughness = mat->roughness;
 	d.specular = mat->specular;
+	d.emissive[0] = mat->emissive.r;
+	d.emissive[1] = mat->emissive.g;
+	d.emissive[2] = mat->emissive.b;
+	d.emissive_intensity = mat->emissive_intensity;
 	d.albedo_tex_guid = mat->albedo_tex.asset.guid;
 	d.metalness_tex_guid = mat->metalness_tex.asset.guid;
 	d.roughness_tex_guid = mat->roughness_tex.asset.guid;
 	d.specular_tex_guid = mat->specular_tex.asset.guid;
 	d.normal_tex_guid = mat->normal_tex.asset.guid;
+	d.emissive_tex_guid = mat->emissive_tex.asset.guid;
 	return d;
 }
 
@@ -129,11 +134,14 @@ Ref<Material> decodeMaterial(const MeshFormat::MaterialDescriptor &d)
 	mat->metalness = d.metalness;
 	mat->roughness = d.roughness;
 	mat->specular = d.specular;
+	mat->emissive = glm::vec4(d.emissive[0], d.emissive[1], d.emissive[2], 1.0f);
+	mat->emissive_intensity = d.emissive_intensity;
 	mat->albedo_tex.asset.guid = d.albedo_tex_guid;
 	mat->metalness_tex.asset.guid = d.metalness_tex_guid;
 	mat->roughness_tex.asset.guid = d.roughness_tex_guid;
 	mat->specular_tex.asset.guid = d.specular_tex_guid;
 	mat->normal_tex.asset.guid = d.normal_tex_guid;
+	mat->emissive_tex.asset.guid = d.emissive_tex_guid;
 	return mat;
 }
 

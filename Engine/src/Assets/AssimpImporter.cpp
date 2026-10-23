@@ -132,6 +132,7 @@ void AssimpImporter::processNode(MeshNode *mesh_node, aiNode *node, const aiScen
 		engine_material->normal_tex.asset = get_texture(aiTextureType_NORMALS);
 		engine_material->metalness_tex.asset = get_texture(aiTextureType_METALNESS);
 		engine_material->roughness_tex.asset = get_texture(aiTextureType_DIFFUSE_ROUGHNESS, aiTextureType_SHININESS);
+		engine_material->emissive_tex.asset = get_texture(aiTextureType_EMISSIVE, aiTextureType_EMISSION_COLOR);
 
 		AssetReference specular = get_texture(aiTextureType_SPECULAR);
 		if (settings.specular_texture_layout == SPECULAR_TEXTURE_OCCLUSION_ROUGHNESS_METALNESS)
@@ -150,6 +151,15 @@ void AssimpImporter::processNode(MeshNode *mesh_node, aiNode *node, const aiScen
 		mat->Get(AI_MATKEY_METALLIC_FACTOR, engine_material->metalness);
 		mat->Get(AI_MATKEY_ROUGHNESS_FACTOR, engine_material->roughness);
 		mat->Get(AI_MATKEY_SPECULAR_FACTOR, engine_material->specular);
+
+		mat->Get(AI_MATKEY_EMISSIVE_INTENSITY, engine_material->emissive_intensity);
+		engine_material->emissive_intensity *= settings.emissive_scale;
+
+		if (mat->Get(AI_MATKEY_COLOR_EMISSIVE, aiColor) == aiReturn_SUCCESS)
+			engine_material->emissive = {aiColor.r, aiColor.g, aiColor.b, 1.0};
+
+		if (engine_material->emissive_tex.asset.isValid() && glm::vec3(engine_material->emissive) == glm::vec3(0.0f))
+			engine_material->emissive = glm::vec4(1.0f);
 	}
 
 	for (int c = 0; c < (int)node->mNumChildren; c++)

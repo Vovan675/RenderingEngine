@@ -140,7 +140,8 @@ struct PixelOutput
 	float4 color : SV_Target0;
 	float4 normal : SV_Target1;
 	float4 shading : SV_Target2;
-	float2 motion_vectors : SV_Target3;
+	float4 emissive : SV_Target3;
+	float2 motion_vectors : SV_Target4;
 };
 
 PixelOutput PSMain(PixelInput IN)
@@ -185,6 +186,11 @@ PixelOutput PSMain(PixelInput IN)
 	output.shading.g = (material.roughness_tex_id > 0) ? SampleTexture(material.roughness_tex_id, IN.uv).g : material.shading.g;
 	output.shading.b = (material.specular_tex_id > 0) ? SampleTexture(material.specular_tex_id, IN.uv).r : material.shading.b;
 	output.shading.a = 1.0;
+
+	float3 emissive = material.emissive.rgb;
+	if (material.emissive_tex_id > 0)
+		emissive *= SampleTexture(material.emissive_tex_id, IN.uv).rgb;
+	output.emissive = float4(emissive, 1.0);
 
 	float2 current_uv = (IN.position.xy + jitter) / render_resolution.xy;
 	float2 old_uv = (IN.old_clip_position.xy / IN.old_clip_position.w) * float2(0.5, -0.5) + 0.5;

@@ -25,6 +25,7 @@ void GBufferPass::addPass(FrameGraph &fg, uint32_t view_id, uint32_t max_draw_ca
 	output.albedo = GFXRID(GBufferAlbedo);
 	output.normal = GFXRID(GBufferNormal);
 	output.shading = GFXRID(GBufferShading);
+	output.emissive = GFXRID(GBufferEmissive);
 	output.motion_vectors = GFXRID(MotionVectors);
 	output.depth = GFXRID(GBufferDepth);
 

@@ -99,13 +99,16 @@ struct alignas(16) MaterialDescriptor
 	float metalness;
 	float roughness;
 	float specular;
+	float emissive[3];
+	float emissive_intensity;
 	uint64_t albedo_tex_guid;
 	uint64_t metalness_tex_guid;
 	uint64_t roughness_tex_guid;
 	uint64_t specular_tex_guid;
 	uint64_t normal_tex_guid;
+	uint64_t emissive_tex_guid;
 };
-static_assert(sizeof(MaterialDescriptor) == 80 && sizeof(MaterialDescriptor) % 16 == 0);
+static_assert(sizeof(MaterialDescriptor) == 96 && sizeof(MaterialDescriptor) % 16 == 0);
 
 struct alignas(16) NodeDescriptor
 {

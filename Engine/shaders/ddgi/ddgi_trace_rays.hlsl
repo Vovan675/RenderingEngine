@@ -123,7 +123,9 @@ void CS_TraceRays(uint3 dispatch_thread_id : SV_DispatchThreadID)
 	float3 diffuse = LambertDiffuse(diffuse_color);
 	float3 shadow_origin = position + normal * 0.01;
 
-	float3 radiance = 0;
+	float3 radiance = material.emissive.rgb;
+	if (material.emissive_tex_id > 0)
+		radiance *= SampleTextureLevel(material.emissive_tex_id, vertex.uv, 0).rgb;
 	for (uint light_index = 0; light_index < lights_count; light_index++)
 	{
 		Light light = getLight(light_index);

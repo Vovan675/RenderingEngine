@@ -43,6 +43,7 @@
 #define GBufferNormal
 #define GBufferDepth
 #define GBufferShading
+#define GBufferEmissive
 #define MotionVectors
 
 #define HiZTexture
