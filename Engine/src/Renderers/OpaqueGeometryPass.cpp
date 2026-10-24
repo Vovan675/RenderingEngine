@@ -202,8 +202,7 @@ void OpaqueGeometryPass::cull_traditional(FrameGraph &fg, const RenderView &view
 
 		gDynamicRHI->setConstantBufferData(0, &constants, sizeof(constants));
 
-		uint32_t num_groups = (view.instance_count + TRADITIONAL_CULLING_THREADGROUP_SIZE - 1) / TRADITIONAL_CULLING_THREADGROUP_SIZE;
-		cmd_list->dispatch(num_groups, 1, 1);
+		cmd_list->dispatch(Math::divideRoundUp(view.instance_count, TRADITIONAL_CULLING_THREADGROUP_SIZE), 1, 1);
 	});
 }
 

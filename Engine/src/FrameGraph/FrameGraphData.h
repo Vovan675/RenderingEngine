@@ -58,6 +58,8 @@
 
 #define SSR
 
+#define Bloom
+
 #define CompositeIndirectAmbient
 #define CompositeIndirectSpecular
 

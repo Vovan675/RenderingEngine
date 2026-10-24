@@ -182,8 +182,7 @@ void MeshletPass::add_instance_culling_pass(FrameGraph &fg, const MeshletCullDes
 			cmd_list->dispatchIndirect(resources.getBuffer(GFXRID_ID(InstanceFixDispatchArgs, view_id)), 1);
 		} else
 		{
-			uint32_t num_groups = (desc.instance_count + INSTANCE_CULLING_THREADGROUP_SIZE - 1) / INSTANCE_CULLING_THREADGROUP_SIZE;
-			cmd_list->dispatch(num_groups, 1, 1);
+			cmd_list->dispatch(Math::divideRoundUp(desc.instance_count, INSTANCE_CULLING_THREADGROUP_SIZE), 1, 1);
 		}
 	});
 }

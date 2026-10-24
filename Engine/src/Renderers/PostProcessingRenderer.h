@@ -16,11 +16,14 @@ public:
 		float vignette_smoothness = 0.2;
 		float exposure = 0.000013;
 		int tonemapper_mode = 0;
+		uint32_t bloom_tex_id = 0;
+		float bloom_intensity = 0;
 	} film_ubo;
 
 	void addPasses(FrameGraph &fg);
 
 private:
+	void addBloomPass(FrameGraph &fg);
 	void addFilmPass(FrameGraph &fg);
 	void addFxaaPass(FrameGraph &fg);
 

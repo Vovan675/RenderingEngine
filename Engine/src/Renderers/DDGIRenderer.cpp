@@ -214,8 +214,7 @@ void DDGIRenderer::addPreparePass(FrameGraph &fg)
 			constants.reset_classification = reset_classification;
 			gDynamicRHI->setConstantBufferData(1, &constants, sizeof(constants));
 
-			uint32_t num_groups = ceil(volume.getProbesCount() / 32.0f);
-			cmd_list->dispatch(num_groups, 1, 1);
+			cmd_list->dispatch(Math::divideRoundUp(volume.getProbesCount(), 32), 1, 1);
 		}
 
 		uint32_t size = probes_to_update.size() * sizeof(uint32_t);
@@ -255,7 +254,7 @@ void DDGIRenderer::addTraceRaysPass(FrameGraph &fg, Ref<RayTracingScene> rt_scen
 		gDynamicRHI->setConstantBufferData(1, &constants, sizeof(constants));
 		setAtlasConstants(resources);
 
-		cmd_list->dispatch(ceil(volume.rays_per_probe / 64.0f), probes_to_update.size(), 1);
+		cmd_list->dispatch(Math::divideRoundUp(volume.rays_per_probe, 64), probes_to_update.size(), 1);
 	});
 }
 
@@ -334,8 +333,7 @@ void DDGIRenderer::addRelocationPass(FrameGraph & fg)
 		constants.probes_to_update_count = probes_to_update.size();
 		gDynamicRHI->setConstantBufferData(1, &constants, sizeof(constants));
 
-		uint32_t num_groups = ceil(probes_to_update.size() / 32.0f);
-		cmd_list->dispatch(num_groups, 1, 1);
+		cmd_list->dispatch(Math::divideRoundUp(probes_to_update.size(), 32), 1, 1);
 	});
 }
 
@@ -360,7 +358,6 @@ void DDGIRenderer::addClassificationPass(FrameGraph &fg)
 		constants.probes_to_update_count = probes_to_update.size();
 		gDynamicRHI->setConstantBufferData(1, &constants, sizeof(constants));
 
-		uint32_t num_groups = ceil(probes_to_update.size() / 32.0f);
-		cmd_list->dispatch(num_groups, 1, 1);
+		cmd_list->dispatch(Math::divideRoundUp(probes_to_update.size(), 32), 1, 1);
 	});
 }

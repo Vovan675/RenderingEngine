@@ -60,8 +60,7 @@ void HiZ::build(FrameGraph &fg, GraphicsResourceName hiz_name, GraphicsResourceN
 
 			gDynamicRHI->setConstantBufferData(0, &constants, sizeof(constants));
 
-			glm::ivec2 dispatch_size = glm::max(glm::vec2(1, 1), glm::ceil(glm::vec2(hiz->getSize(mip)) / float(HIZ_THREADGROUP_SIZE)));
-			cmd_list->dispatch(dispatch_size.x, dispatch_size.y, 1);
+			cmd_list->dispatch(Math::divideRoundUp(hiz->getSize(mip).x, HIZ_THREADGROUP_SIZE), Math::divideRoundUp(hiz->getSize(mip).y, HIZ_THREADGROUP_SIZE), 1);
 			hiz->transitLayout(cmd_list, TEXTURE_LAYOUT_UAV);
 		}
 	});

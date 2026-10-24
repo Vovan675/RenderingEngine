@@ -294,7 +294,7 @@ void GeometryStreaming::addAgeFilterAndReadbackPasses(FrameGraph &frame_graph)
 			gGlobalPipeline->setupComputePipeline(gDynamicRHI->createShader(L"shaders/gpu_driven/meshlet_stream_aging.hlsl", COMPUTE_SHADER));
 			gGlobalPipeline->flushAndBind(cmd_list);
 			gDynamicRHI->setConstantBufferData(0, &constants, sizeof(constants));
-			cmd_list->dispatch((group_count + 63) / 64, 1, 1);
+			cmd_list->dispatch(Math::divideRoundUp(group_count, 64), 1, 1);
 		});
 	}
 

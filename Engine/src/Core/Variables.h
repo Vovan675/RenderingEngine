@@ -122,6 +122,24 @@ REFLECT_BEGIN(FilmSettings)
 		.EDIT_IF(owner.vignette),
 REFLECT_END()
 
+struct BloomSettings
+{
+	bool enabled = false;
+	float intensity = 0.1f;
+	float threshold = 3.0f;
+	float scatter = 0.7f;
+	uint32_t mip_count = 9;
+};
+
+REFLECT_BEGIN(BloomSettings)
+	REFLECT_CATEGORY("Bloom"),
+	REFLECT_FIELD(enabled).label("Enable Bloom"),
+	REFLECT_FIELD(intensity).range(0.0f, 1.0f).format("%.3f").EDIT_IF(owner.enabled),
+	REFLECT_FIELD(threshold).range(0.0f, 10.0f).format("%.2f").EDIT_IF(owner.enabled),
+	REFLECT_FIELD(scatter).range(0.0f, 1.0f).format("%.2f").EDIT_IF(owner.enabled),
+	REFLECT_FIELD(mip_count).range(1.0f, 12.0f).tooltip("More mips = wider effect").EDIT_IF(owner.enabled),
+REFLECT_END()
+
 enum RTXDIBiasCorrection
 {
 	BIAS_CORRECTION_OFF = 0,
@@ -339,6 +357,7 @@ struct RenderSettings
 
 	SkySettings sky;
 	FilmSettings film;
+	BloomSettings bloom;
 	LightingSettings lighting;
 	SSAOSettings ssao;
 	ShadowSettings shadows;
@@ -351,6 +370,7 @@ REFLECT_BEGIN(RenderSettings)
 	REFLECT_FIELD(path_tracing),
 	REFLECT_FIELD(sky),
 	REFLECT_FIELD(film),
+	REFLECT_FIELD(bloom),
 	REFLECT_FIELD(lighting),
 	REFLECT_FIELD(ssao),
 	REFLECT_FIELD(shadows),

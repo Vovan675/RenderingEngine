@@ -4,30 +4,32 @@
 // Constant Buffer
 cbuffer UBO : register(b0)
 {
-    uint composite_final_tex_id;
-    float use_vignette;
-    float vignette_radius;
-    float vignette_smoothness;
-    float exposure;
-    int tonemapper_mode;
+	uint composite_final_tex_id;
+	float use_vignette;
+	float vignette_radius;
+	float vignette_smoothness;
+	float exposure;
+	int tonemapper_mode;
+	uint bloom_tex_id;
+	float bloom_intensity;
 };
 
 // Vignette Calculation
 float GetVignette(float2 uv, float radius, float smoothness) {
-    float dist = radius - distance(uv, float2(0.5, 0.5));
-    return smoothstep(-smoothness, smoothness, dist);
+	float dist = radius - distance(uv, float2(0.5, 0.5));
+	return smoothstep(-smoothness, smoothness, dist);
 }
 
 // Uncharted 2 Tone Mapping
 float3 Uncharted2(float3 x) {
-    float A = 0.15;
-    float B = 0.50;
-    float C = 0.10;
-    float D = 0.20;
-    float E = 0.02;
-    float F = 0.30;
-    float W = 11.2;
-    return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
+	float A = 0.15;
+	float B = 0.50;
+	float C = 0.10;
+	float D = 0.20;
+	float E = 0.02;
+	float F = 0.30;
+	float W = 11.2;
+	return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
 }
 
 // ACES Curve Fit Approximation
@@ -70,27 +72,33 @@ float3 ACESFitted(float3 color)
 }
 
 float4 PSMain(float2 uv : TEXCOORD0) : SV_TARGET {
-    // Calculate vignette
-    float vignette = 1.0;
-    if (use_vignette > 0.5) {
-        vignette = GetVignette(uv, vignette_radius, vignette_smoothness);
-    }
+	// Calculate vignette
+	float vignette = 1.0;
+	if (use_vignette > 0.5) {
+		vignette = GetVignette(uv, vignette_radius, vignette_smoothness);
+	}
 
-    // Sample composite texture
-    float4 compositeFinal = SampleTexture(composite_final_tex_id, uv);
-    float4 value = compositeFinal * vignette;
+	// Sample composite texture
+	float4 compositeFinal = SampleTexture(composite_final_tex_id, uv);
+	if (bloom_intensity > 0.0)
+	{
+		float3 bloom = SampleTextureLevel(bloom_tex_id, uv, 0, linear_clamp_sampler).rgb;
+		compositeFinal.rgb += bloom / exposure * bloom_intensity;
+	}
 
-    value *= exposure;
+	float4 value = compositeFinal * vignette;
 
-    // Apply tone mapping
-    if (tonemapper_mode == 1)
-        value = float4(Uncharted2(value.rgb), 1.0);
-    else if (tonemapper_mode == 2)
-        value = float4(ACESFitted(value.rgb), 1.0);
+	value *= exposure;
 
-    // Convert to sRGB
-    value = LinearToSRGB(value);
-    value = clamp(value, 0.0f, 1.0f);
+	// Apply tone mapping
+	if (tonemapper_mode == 1)
+		value = float4(Uncharted2(value.rgb), 1.0);
+	else if (tonemapper_mode == 2)
+		value = float4(ACESFitted(value.rgb), 1.0);
 
-    return float4(value.rgb, 1.0);
+	// Convert to sRGB
+	value = LinearToSRGB(value);
+	value = clamp(value, 0.0f, 1.0f);
+
+	return float4(value.rgb, 1.0);
 }

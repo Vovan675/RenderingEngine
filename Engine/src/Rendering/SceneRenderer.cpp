@@ -716,7 +716,6 @@ void SceneRenderer::gpu_frame_cull(FrameGraph &frame_graph)
 
 		gDynamicRHI->setConstantBufferData(0, &constants, sizeof(constants));
 
-		int num_groups = ceil(constants.instances_count / 32.0f);
-		cmd_list->dispatch(num_groups, 1, 1);
+		cmd_list->dispatch(Math::divideRoundUp(constants.instances_count, 32), 1, 1);
 	});
 }
